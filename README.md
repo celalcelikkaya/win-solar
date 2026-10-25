@@ -1,4 +1,4 @@
-# <img src="https://private-user-images.githubusercontent.com/197960224/683784368-a8a7487c-b83b-461d-8ef3-4f8d096a6133.png?jwt=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3OTI4ODI5NDAsIm5iZiI6MTc5Mjg4MjY0MCwicGF0aCI6Ii8xOTc5NjAyMjQvNjgzNzg0MzY4LWE4YTc0ODdjLWI4M2ItNDYxZC04ZWYzLTRmOGQwOTZhNjEzMy5wbmc_WC1BbXotQWxnb3JpdGhtPUFXUzQtSE1BQy1TSEEyNTYmWC1BbXotQ3JlZGVudGlhbD1BS0lBVkNPRFlMU0E1M1BRSzRaQSUyRjIwMjYxMDI0JTJGdXMtZWFzdC0xJTJGczMlMkZhd3M0X3JlcXVlc3QmWC1BbXotRGF0ZT0yMDI2MTAyNFQyMjU3MjBaJlgtQW16LUV4cGlyZXM9MzAwJlgtQW16LVNpZ25hdHVyZT02YjBkYTQ0OWU4NWQ4MTAxMjVlZTAwNjNkNGE0MTNiZDZmMzFmZDRmMmQ5NDg5ZmRiOTllN2QyNjJkYWIzMTFjJlgtQW16LVNpZ25lZEhlYWRlcnM9aG9zdCZyZXNwb25zZS1jb250ZW50LXR5cGU9aW1hZ2UlMkZwbmcifQ.vQ54aQ9NQSs2b7YWYxmPw4cWifpmjOirUTzrVYa7jE0" width="32" align="absmiddle" /> Win Solar
+# <img src="https://github.com/celalcelikkaya/win-solar/blob/main/win-solar-icon.png" width="32" align="absmiddle" /> Win Solar
 
 **Win Solar** is a lightweight Windows application that automatically switches your system between light and dark themes based on local sunrise and sunset times.
 
