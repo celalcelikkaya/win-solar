@@ -1,0 +1,59 @@
+{
+  "name": "winsolar-v2",
+  "private": true,
+  "version": "2.0.0",
+  "author": "Celal Çelikkaya",
+  "description": "Win Solar - sunrise/sunset based Windows light/dark theme scheduler",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 3000 --open",
+    "build": "vite build",
+    "preview": "vite preview --port 3000 --open",
+    "lint": "tsc --noEmit",
+    "desktop": "vite build && electron .",
+    "dist": "vite build && electron-builder --win nsis",
+    "dist:portable": "vite build && electron-builder --win portable"
+  },
+  "dependencies": {
+    "lucide-react": "^0.546.0",
+    "react": "^19.0.1",
+    "react-dom": "^19.0.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^5.0.4",
+    "electron": "^44.4.3",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.3",
+    "electron-builder": "^26.0.12"
+  },
+  "main": "electron/main.cjs",
+  "build": {
+    "appId": "com.winsolar.app",
+    "productName": "Win Solar",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        "nsis"
+      ],
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "runAfterFinish": true
+    }
+  }
+}
