@@ -1,4 +1,4 @@
-# <img src="https://github.com/celalcelikkaya/win-solar/blob/main/win-solar-icon.png" width="32" align="absmiddle" /> Win Solar
+# <img src="https://github.com/celalcelikkaya/win-solar/blob/main/docs/screenshots/win-solar-icon.png" width="32" align="absmiddle" /> Win Solar
 
 **Win Solar** is a lightweight Windows application that automatically switches your system between light and dark themes based on local sunrise and sunset times.
 
@@ -38,6 +38,7 @@ src/        interface (React + TypeScript): App.tsx, components/, lib/ (sun time
 electron/   desktop shell: main.cjs (window, theme switching), tray.cjs, windows.cjs (Windows theme registry), preload.cjs
 public/     icons used by the interface
 build/      installer icon
+docs/       screenshots used in this README
 ```
 
 ---
@@ -46,4 +47,4 @@ build/      installer icon
 
 | Light Mode | Dark Mode |
 | :---: | :---: |
-| ![Light Desktop](https://github.com/celalcelikkaya/win-solar/blob/main/win-solar-desktop-light.png) <br> ![Light Tray](https://github.com/celalcelikkaya/win-solar/blob/main/win-solar-light.png) | ![Dark Desktop](https://github.com/celalcelikkaya/win-solar/blob/main/win-solar-desktop-dark.png) <br> ![Dark Tray](https://github.com/celalcelikkaya/win-solar/blob/main/win-solar-night.png) |
+| ![Light Desktop](https://github.com/celalcelikkaya/win-solar/blob/main/docs/screenshots/win-solar-desktop-light.png) <br> ![Light Tray](https://github.com/celalcelikkaya/win-solar/blob/main/docs/screenshots/win-solar-light.png) | ![Dark Desktop](https://github.com/celalcelikkaya/win-solar/blob/main/docs/screenshots/win-solar-desktop-dark.png) <br> ![Dark Tray](https://github.com/celalcelikkaya/win-solar/blob/main/docs/screenshots/win-solar-night.png) |
