@@ -21,6 +21,27 @@ You can download the latest stable release from the [Releases](https://github.co
 
 ---
 
+## 🛠️ Build from source
+
+Requirements: Windows, [Node.js](https://nodejs.org) 20 or newer.
+
+| Command | What it does |
+|---|---|
+| `start.bat` / `npm run dev` | Opens the interface in the browser (development) |
+| `start-desktop.bat` / `npm run desktop` | Builds and starts the desktop app |
+| `build-exe.bat` / `npm run dist` | Builds the Windows installer into `release/` |
+| `npm run dist:portable` | Builds a portable `.exe` |
+| `npm run lint` | Type check |
+
+```
+src/        interface (React + TypeScript): App.tsx, components/, lib/ (sun times, scheduler, places, i18n)
+electron/   desktop shell: main.cjs (window, theme switching), tray.cjs, windows.cjs (Windows theme registry), preload.cjs
+public/     icons used by the interface
+build/      installer icon
+```
+
+---
+
 ## 🖼️ Screenshots
 
 | Light Mode | Dark Mode |
