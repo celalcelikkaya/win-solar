@@ -144,10 +144,16 @@ Toggle "Pointer and sounds follow the profile" (default on); off keeps the dayti
 - Modes: **Moves with the sun** (default), Per profile, Off.
 - The user's own wallpaper path(s) are saved at first run (and whenever Win Solar sees the user change it
   themselves); "Restore" puts it back and sets mode to Off.
-- Sun mode: one scene in 8 frames, chosen by solar elevation and morning/afternoon:
-  night (< −6°), dawn/dusk (−6..0°), sunrise/golden hour (0..8°), morning/afternoon (8..40°), noon (≥ 40°).
-  Change frames with a crossfade of the Windows wallpaper (set via `IDesktopWallpaper`).
-- Image source: **open question for Celal**, see end.
+- Sun mode uses **macOS dynamic wallpapers (.heic) that the user imports** (Celal's choice). Apple's own sets are
+  copyrighted and are not shipped; users bring their own (e.g. free sets from dynamicwallpaper.club).
+  - Import: pick a `.heic` file; Win Solar extracts every frame to PNG at screen resolution into
+    `%AppData%\Win Solar\Wallpapers\<name>\` and reads the frame schedule from the file's metadata:
+    solar sets (`apple_desktop:solar`: sun altitude/azimuth per frame) are matched against the current sun position;
+    time-based sets (`apple_desktop:h24`) by time of day. Several sets can be imported; one is active.
+  - Windows cannot decode HEIF on its own: add a decoding library (e.g. Magick.NET or a libheif wrapper; a few MB).
+  - Frame changes set the Windows wallpaper via `IDesktopWallpaper` (Windows' own short fade).
+  - First run without an imported set: **open question for Celal**, see end.
+  - Demo fallback model (8 frames by elevation) is only a reference for how often frames change.
 
 ### Battery
 
@@ -241,7 +247,12 @@ repo once v3 reaches parity, on a branch, merged after Celal approves.
 Exact XAML styling within the demo's look, threshold-learning algorithm details, weather-factor mapping curve,
 library choices (e.g. tray icon, notifications), test design, task order.
 
+## Decided with Celal
+
+- Source of truth is the GitHub repo; the PC copy is not needed (Celal deletes local copies after pushing).
+- Sun wallpaper images: imported macOS dynamic wallpapers (.heic).
+
 ## Open questions for Celal
 
-1. Where should the "moves with the sun" wallpaper images come from?
-2. The Win Solar copy on the PC: is it the same as the GitHub repo, or does it have changes the repo doesn't?
+1. First run has no dynamic wallpaper yet: a "Choose a dynamic wallpaper" step in the welcome screen, or also a small
+   built-in drawn set that works right away?
