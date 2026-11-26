@@ -1,3 +1,4 @@
+using System.IO;
 using WinSolar.Core.Engine;
 using WinSolar.Core.Settings;
 
