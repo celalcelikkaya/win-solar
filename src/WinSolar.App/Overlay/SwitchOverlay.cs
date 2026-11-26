@@ -19,14 +19,17 @@ namespace WinSolar.App.Overlay;
 public sealed class SwitchOverlay
 {
     private static readonly TimeSpan Look = TimeSpan.FromMilliseconds(100);
-    private static readonly TimeSpan GiveUp = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan MinWait = TimeSpan.FromMilliseconds(600);
+    private static readonly TimeSpan GiveUp = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan CatchUp = TimeSpan.FromMilliseconds(300);
     private static readonly TimeSpan RollTime = TimeSpan.FromSeconds(1.6);
     private static readonly TimeSpan FadeTime = TimeSpan.FromSeconds(1.3);
-    private static readonly TimeSpan Watchdog = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan Watchdog = TimeSpan.FromSeconds(8);
     private const double Band = 0.12;
 
     private readonly List<(Window Window, Native.Rect Bounds, Image New, Image Old)> screens = [];
     private uint[]? oldSample, lastSample;
+    private int stableLooks;
     private DateTime appliedAt;
     private DispatcherTimer? step;
     private DispatcherTimer? watchdog;
@@ -68,6 +71,7 @@ public sealed class SwitchOverlay
         watchdog = new DispatcherTimer(Watchdog, DispatcherPriority.Normal, (_, _) => Close(), Dispatcher.CurrentDispatcher);
         appliedAt = DateTime.UtcNow;
         lastSample = null;
+        stableLooks = 0;
         step = new DispatcherTimer(Look, DispatcherPriority.Normal, (_, _) => WaitForRepaint(animation), Dispatcher.CurrentDispatcher);
     }
 
@@ -107,8 +111,9 @@ public sealed class SwitchOverlay
     }
 
     /// <summary>
-    /// Windows repaints at its own pace after a theme change. Look every 100 ms (the overlay is excluded from capture)
-    /// and start once the screen differs from the frozen picture and has stopped changing, or after 2 s.
+    /// Windows repaints at its own pace after a theme change, and some apps (Electron, browsers) much later than the
+    /// taskbar. Look about every 100 ms (the overlay is excluded from capture) and start once the screen differs from
+    /// the frozen picture and three looks in a row agree, no sooner than 0.6 s and no later than 3 s.
     /// </summary>
     private void WaitForRepaint(SwitchAnimation animation)
     {
@@ -117,9 +122,10 @@ public sealed class SwitchOverlay
             var captures = screens.Select(s => Capture(s.Bounds)).ToList();
             var sample = Sample(captures[0]);
             var changed = Differs(oldSample!, sample, 0.02);
-            var settled = changed && lastSample is not null && !Differs(lastSample, sample, 0.002);
+            stableLooks = changed && lastSample is not null && !Differs(lastSample, sample, 0.002) ? stableLooks + 1 : 0;
             lastSample = sample;
-            if (!settled && DateTime.UtcNow - appliedAt < GiveUp) return;
+            var waited = DateTime.UtcNow - appliedAt;
+            if ((stableLooks < 2 || waited < MinWait) && waited < GiveUp) return;
             for (var i = 0; i < screens.Count; i++) screens[i].New.Source = captures[i];
         }
         catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.ExternalException)
@@ -154,7 +160,6 @@ public sealed class SwitchOverlay
 
     private void Reveal(SwitchAnimation animation)
     {
-
         var time = animation == SwitchAnimation.Fade ? FadeTime : RollTime;
         var ease = new CubicEase { EasingMode = EasingMode.EaseInOut };
         foreach (var s in screens)
@@ -175,7 +180,44 @@ public sealed class SwitchOverlay
 
         frames = 0;
         CompositionTarget.Rendering += CountFrame;
-        step = new DispatcherTimer(time + TimeSpan.FromMilliseconds(60), DispatcherPriority.Normal, (_, _) => Close(), Dispatcher.CurrentDispatcher);
+        step = new DispatcherTimer(time + TimeSpan.FromMilliseconds(60), DispatcherPriority.Normal, (_, _) => CatchUpLate(), Dispatcher.CurrentDispatcher);
+    }
+
+    /// <summary>An app that repainted after the new picture was taken would pop in when the overlay closes: fade to it instead.</summary>
+    private void CatchUpLate()
+    {
+        step?.Stop();
+        step = null;
+        CompositionTarget.Rendering -= CountFrame;
+        try
+        {
+            var late = false;
+            foreach (var s in screens)
+            {
+                var live = Capture(s.Bounds);
+                if (s.New.Source is not BitmapSource shown || !Differs(Sample(shown), Sample(live), 0.002)) continue;
+                late = true;
+                s.Old.BeginAnimation(UIElement.OpacityProperty, null);
+                s.Old.OpacityMask = null;
+                s.Old.Opacity = 1;
+                s.Old.Source = shown;
+                s.New.Source = live;
+                s.Old.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(1, 0, CatchUp));
+            }
+
+            if (late)
+            {
+                Log.Write("Switch animation: an app repainted late; faded to it");
+                step = new DispatcherTimer(CatchUp + TimeSpan.FromMilliseconds(40), DispatcherPriority.Normal, (_, _) => Close(), Dispatcher.CurrentDispatcher);
+                return;
+            }
+        }
+        catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.ExternalException)
+        {
+            Log.Write($"Switch animation: {e.Message}");
+        }
+
+        Close();
     }
 
     private void CountFrame(object? sender, EventArgs e)
