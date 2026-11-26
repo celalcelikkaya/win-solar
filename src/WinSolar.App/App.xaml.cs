@@ -24,6 +24,19 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
+        // Failures are logged and shown, never silent and never fatal for a tray app.
+        DispatcherUnhandledException += (_, args) =>
+        {
+            Log.Write($"Unhandled: {args.Exception}");
+            args.Handled = true;
+        };
+        TaskScheduler.UnobservedTaskException += (_, args) =>
+        {
+            Log.Write($"Unobserved task: {args.Exception}");
+            args.SetObserved();
+        };
+        AppDomain.CurrentDomain.UnhandledException += (_, args) => Log.Write($"Fatal: {args.ExceptionObject}");
+
         singleInstance = new Mutex(initiallyOwned: true, MutexName, out var first);
         if (!first)
         {

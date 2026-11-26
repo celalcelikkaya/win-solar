@@ -18,14 +18,17 @@ public sealed class SolarEngine
     private readonly INotifier notifier;
     private readonly IFullScreenProbe fullScreen;
     private readonly IStateStore store;
-    private readonly Place fallbackPlace;
 
     private AppState state;
     private AppState savedState;
     private Theme applied;
     private bool waiting;
     private Transition? headsUp;
-    private DateTimeOffset? headsUpShownFor;
+    private (DateOnly Date, TransitionKind Kind)? headsUpShownFor;
+    private bool outsideChange; // Windows was changed behind our back: keep it until the next switch passes
+    private (DateOnly Date, TransitionKind Kind)? outsideSince;
+    private bool userAction;
+    private string? error;
 
     public SolarEngine(IClock clock, IThemeApplier theme, INotifier notifier, IFullScreenProbe fullScreen, IStateStore store, Place fallbackPlace)
     {
@@ -34,16 +37,19 @@ public sealed class SolarEngine
         this.notifier = notifier;
         this.fullScreen = fullScreen;
         this.store = store;
-        this.fallbackPlace = fallbackPlace;
+        FallbackPlace = fallbackPlace;
         state = savedState = store.State;
     }
 
     public DateTimeOffset NextDue { get; private set; }
 
+    /// <summary>The place used until the user picks one; refreshed when the PC time zone changes.</summary>
+    public Place FallbackPlace { get; set; }
+
     public event Action<EngineSnapshot>? Changed;
 
     private AppSettings Settings => store.Settings;
-    private Place Place => Settings.Place ?? fallbackPlace;
+    private Place Place => Settings.Place ?? FallbackPlace;
 
     /// <summary>First run after launch: never notifies, and changes nothing when the theme is already right.</summary>
     public EngineSnapshot Start()
@@ -63,7 +69,7 @@ public sealed class SolarEngine
             Hold = null,
             ManualUntil = mode == Mode.Auto ? null : Holds.ManualUntil(s, Settings.ManualEndsByItself),
         };
-        Tick();
+        UserTick();
     }
 
     public void Snooze() => SetHold(s => Holds.Snooze(s, applied));
@@ -77,15 +83,25 @@ public sealed class SolarEngine
     public void Resume()
     {
         state = state with { Hold = null };
-        Tick();
+        UserTick();
+    }
+
+    /// <summary>A tick caused by something the user just did: any switch it makes is quiet.</summary>
+    private void UserTick()
+    {
+        userAction = true;
+        try { Tick(); }
+        finally { userAction = false; }
     }
 
     /// <summary>Win + Shift + D: flip now as a manual change, or go back to Auto when the flip matches the schedule.</summary>
     public (Theme Theme, string Detail) Shortcut()
     {
         var now = clock.Now;
+        applied = theme.Read();
         ClearExpired(now);
         var s = Recompute(now);
+        ClearCaughtUp(s);
         var target = applied == Theme.Light ? Theme.Dark : Theme.Light;
         string detail;
         if (state.Mode != Mode.Auto && target == s.Theme)
@@ -119,10 +135,23 @@ public sealed class SolarEngine
         var now = clock.Now;
         ClearExpired(now);
         var s = Recompute(now);
+        ClearCaughtUp(s);
         var decision = ThemeDecider.Decide(new DecisionInput(state.Mode, state.Hold, false, null, false, s));
         var isFullScreen = fullScreen.IsFullScreen();
 
-        if (decision.Theme != applied)
+        // Windows changed behind our back: respect it until the decision itself changes.
+        var onScreen = theme.Read();
+        var prevId = Id(s.Prev);
+        if (!starting && onScreen != applied)
+        {
+            applied = onScreen;
+            outsideChange = true;
+            outsideSince = prevId;
+        }
+
+        if (outsideChange && (outsideSince != prevId || state.Mode != Mode.Auto || state.Hold is not null)) outsideChange = false;
+
+        if (decision.Theme != applied && !outsideChange)
         {
             if (ThemeDecider.ShouldDefer(decision.Cause, isFullScreen, Settings.WaitForFullScreen))
             {
@@ -130,7 +159,7 @@ public sealed class SolarEngine
             }
             else
             {
-                var cause = starting ? Cause.Start : waiting ? Cause.FullScreenEnded : decision.Cause;
+                var cause = starting ? Cause.Start : userAction ? Cause.Manual : waiting ? Cause.FullScreenEnded : decision.Cause;
                 waiting = false;
                 Switch(decision.Theme, cause);
             }
@@ -144,19 +173,36 @@ public sealed class SolarEngine
 
         if (state != savedState)
         {
-            store.Save(state);
-            savedState = state;
+            try
+            {
+                store.Save(state);
+                savedState = state;
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                // Kept in memory; saved again on the next tick.
+            }
         }
 
         NextDue = global::WinSolar.Core.Engine.NextDue.Compute(now, s, state.Hold, state.ManualUntil, HeadsUpLead);
-        var snapshot = new EngineSnapshot(s, state.Mode, state.ManualUntil, state.Hold, applied, waiting, headsUp, Place);
+        var snapshot = new EngineSnapshot(s, state.Mode, state.ManualUntil, state.Hold, applied, waiting, headsUp, Place, error);
         Changed?.Invoke(snapshot);
         return snapshot;
     }
 
     private void Switch(Theme target, Cause cause)
     {
-        theme.Apply(target);
+        try
+        {
+            theme.Apply(target);
+            error = null;
+        }
+        catch (Exception e) when (e is UnauthorizedAccessException or IOException or System.Security.SecurityException or InvalidOperationException)
+        {
+            error = "Could not change the Windows theme";
+            return;
+        }
+
         applied = target;
         state = state with { LastApplied = target };
         if (headsUp is not null)
@@ -184,11 +230,12 @@ public sealed class SolarEngine
 
         if (eligible)
         {
-            if (headsUpShownFor != next!.At)
+            var id = Id(next!);
+            if (headsUpShownFor != id)
             {
-                headsUpShownFor = next.At;
-                headsUp = next;
-                notifier.HeadsUp(next, (int)Math.Ceiling((next.At - now).TotalMinutes));
+                headsUpShownFor = id;
+                headsUp = next!;
+                notifier.HeadsUp(next!, (int)Math.Ceiling((next!.At - now).TotalMinutes));
             }
         }
         else if (headsUp is not null)
@@ -203,6 +250,17 @@ public sealed class SolarEngine
         if (state.Mode != Mode.Auto && state.ManualUntil is { } until && until <= now)
             state = state with { Mode = Mode.Auto, ManualUntil = null };
         if (state.Hold is { } hold && (hold.Until <= now || state.Mode != Mode.Auto))
+            state = state with { Hold = null };
+    }
+
+    /// <summary>A transition's identity that survives real light moving it by minutes: local date + kind.</summary>
+    private (DateOnly Date, TransitionKind Kind)? Id(Transition? t) =>
+        t is null ? null : (Zones.LocalDate(t.At, Zones.Find(Place.TimeZoneId)), t.Kind);
+
+    /// <summary>Switch now ends once the schedule reaches the theme it took early.</summary>
+    private void ClearCaughtUp(Schedule s)
+    {
+        if (state.Hold is { Kind: HoldKind.SwitchNow } hold && s.Theme == hold.Theme)
             state = state with { Hold = null };
     }
 

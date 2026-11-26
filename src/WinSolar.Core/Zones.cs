@@ -7,6 +7,9 @@ public static class Zones
 {
     private static readonly ConcurrentDictionary<string, TimeZoneInfo> Cache = new();
 
+    /// <summary>Forgets cached zones (after Windows' time-zone data or the PC zone changed).</summary>
+    public static void ClearCache() => Cache.Clear();
+
     /// <summary>Finds a zone by IANA or Windows id (.NET 8 converts between them); unknown ids fall back to UTC.</summary>
     public static TimeZoneInfo Find(string id) => Cache.GetOrAdd(id, static key =>
     {

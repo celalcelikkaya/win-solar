@@ -44,4 +44,5 @@ public sealed record EngineSnapshot(
     Theme Applied,
     bool WaitingForFullScreen,
     Transition? HeadsUp,
-    Place Place);
+    Place Place,
+    string? Error = null);

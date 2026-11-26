@@ -140,11 +140,24 @@ begin
   RegDeleteValue(HKEY_CURRENT_USER, RunKey, 'com.winsolar.app');
   RegDeleteValue(HKEY_CURRENT_USER, RunKey, 'Win Solar');
 
+  { A per-machine Win Solar 2 needs administrator rights to remove; this setup never asks for them. }
+  if RootKey = HKEY_LOCAL_MACHINE then
+  begin
+    SuppressibleMsgBox('Win Solar 2 is installed for all users, which needs administrator rights to remove.' + #13#10 +
+      'Please remove it in Settings > Apps after this setup finishes.', mbInformation, MB_OK, IDOK);
+    Exit;
+  end;
+
   { An NSIS uninstaller copies itself to %TEMP%, starts that copy and returns at once. The copy then deletes
     "Programs\Win Solar" and the "Win Solar" Start shortcut - the same folder and shortcut Win Solar 3 uses - while
     or after we install, which broke the 3.0.0 install. "_?=<folder>" makes it run in place and finish first. }
   Dir := ExtractFileDir(Uninstaller);
-  Exec(Uninstaller, Trim(Args + ' /S') + ' _?=' + Dir, Dir, SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  if not Exec(Uninstaller, Trim(Args + ' /S') + ' _?=' + Dir, Dir, SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+  begin
+    SuppressibleMsgBox('Win Solar 2 could not be removed automatically. Please remove it in Settings > Apps.',
+      mbInformation, MB_OK, IDOK);
+    Exit;
+  end;
 
   { Belt and braces: wait (up to 60 s) until its uninstall entry is gone. }
   Waited := 0;
@@ -156,6 +169,15 @@ begin
 
   { Run in place, the uninstaller cannot delete itself. }
   DeleteFile(Uninstaller);
+end;
+
+{ The app has only hidden windows, so Restart Manager may not close it: stop it before files are replaced. }
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  ResultCode: Integer;
+begin
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/IM WinSolar.exe /F', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Result := '';
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);

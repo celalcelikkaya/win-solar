@@ -18,8 +18,9 @@ public static class Holds
 
     public static Hold Pause(DateTimeOffset now, Theme current, TimeSpan length) => new(current, now + length, HoldKind.Pause);
 
-    /// <summary>Take the next switch's theme now; the hold ends exactly when the schedule agrees.</summary>
-    public static Hold? SwitchNow(Schedule s) => s.Next is null ? null : new Hold(s.Next.Theme, s.Next.At, HoldKind.SwitchNow);
+    /// <summary>Take the next switch's theme now. The engine ends the hold when the schedule agrees (the switch may
+    /// move with real light); <c>Until</c> is only a safety cap.</summary>
+    public static Hold? SwitchNow(Schedule s) => s.Next is null ? null : new Hold(s.Next.Theme, s.Next.At.AddDays(1), HoldKind.SwitchNow);
 
     /// <summary>When a manual mode should end by itself (the next switch), or null when it should last.</summary>
     public static DateTimeOffset? ManualUntil(Schedule s, bool endsByItself) => endsByItself ? s.Next?.At : null;

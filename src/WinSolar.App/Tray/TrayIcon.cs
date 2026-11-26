@@ -49,7 +49,7 @@ public sealed class TrayIcon : IDisposable
 
     public void Update(EngineSnapshot s)
     {
-        var badge = s.WaitingForFullScreen ? TrayBadge.Waiting
+        var badge = s.Error is not null || s.WaitingForFullScreen ? TrayBadge.Waiting
             : s.Hold is { Kind: not HoldKind.SwitchNow } ? TrayBadge.Hold
             : s.Mode != Mode.Auto ? TrayBadge.Manual
             : TrayBadge.None;
@@ -64,7 +64,7 @@ public sealed class TrayIcon : IDisposable
             drawn = (s.Applied, badge);
         }
 
-        var text = Tooltip(s, host.Store.Settings.Hour12);
+        var text = s.Error is { } err ? $"Win Solar: {err}" : Tooltip(s, host.Store.Settings.Hour12);
         icon.Text = text.Length > 127 ? text[..127] : text;
     }
 

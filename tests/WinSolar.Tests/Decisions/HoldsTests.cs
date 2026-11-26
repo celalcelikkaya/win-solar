@@ -31,12 +31,12 @@ public class HoldsTests
     }
 
     [Fact]
-    public void SwitchNow_takes_next_theme_until_next()
+    public void SwitchNow_takes_next_theme_with_a_one_day_safety_cap()
     {
         var s = LightSchedule;
         var h = Holds.SwitchNow(s)!;
         Assert.Equal(Theme.Dark, h.Theme);
-        Assert.Equal(s.Next!.At, h.Until);
+        Assert.Equal(s.Next!.At.AddDays(1), h.Until);
     }
 
     [Fact]

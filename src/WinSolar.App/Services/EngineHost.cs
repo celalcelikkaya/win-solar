@@ -46,6 +46,7 @@ public sealed class EngineHost : IDisposable
 
     private void OnChanged(EngineSnapshot snapshot)
     {
+        if (snapshot.Error is { } error && error != Last?.Error) Log.Write(error);
         Last = snapshot;
         timer.Stop();
         var wait = Engine.NextDue - DateTimeOffset.Now;
@@ -70,7 +71,12 @@ public sealed class EngineHost : IDisposable
     private void OnTimeChanged(object? sender, EventArgs e)
     {
         TimeZoneInfo.ClearCachedData();
-        Later();
+        Zones.ClearCache();
+        dispatcher.BeginInvoke(new Action(() =>
+        {
+            Engine.FallbackPlace = GuessPlace();
+            Tick();
+        }));
     }
 
     private static Place GuessPlace()

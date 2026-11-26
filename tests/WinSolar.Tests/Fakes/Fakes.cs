@@ -15,10 +15,16 @@ internal sealed class FakeTheme(Theme current) : IThemeApplier
     public Theme Current { get; private set; } = current;
     public int Applies { get; private set; }
 
+    public bool FailApply { get; set; }
+
     public Theme Read() => Current;
+
+    /// <summary>The user (or another app) changes the Windows theme behind the engine's back.</summary>
+    public void SetOutside(Theme theme) => Current = theme;
 
     public void Apply(Theme theme)
     {
+        if (FailApply) throw new UnauthorizedAccessException("registry");
         Current = theme;
         Applies++;
     }
@@ -46,9 +52,11 @@ internal sealed class MemoryStore(AppSettings settings, AppState? state = null) 
     public AppSettings Settings { get; set; } = settings;
     public AppState State { get; private set; } = state ?? new AppState();
     public int Saves { get; private set; }
+    public int FailNextSaves { get; set; }
 
     public void Save(AppState value)
     {
+        if (FailNextSaves > 0) { FailNextSaves--; throw new IOException("locked"); }
         State = value;
         Saves++;
     }

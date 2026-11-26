@@ -229,4 +229,78 @@ public class SolarEngineTests
         r.TickAt(Sunset.AddMinutes(1));
         Assert.Equal(1, r.Theme.Applies);
     }
+
+    [Fact]
+    public void Theme_changed_outside_is_respected()
+    {
+        var r = new Rig(Noon, Theme.Light);
+        r.Engine.Start();
+        r.Theme.SetOutside(Theme.Dark);
+        var (theme, _) = r.Engine.Shortcut();
+        Assert.Equal(Theme.Light, theme);
+    }
+
+    [Fact]
+    public void SwitchNow_ends_when_schedule_catches_up()
+    {
+        var r = new Rig(Noon, Theme.Light);
+        r.Engine.Start();
+        r.TickAt(Sunset.AddMinutes(-30));
+        r.Engine.SwitchNow();
+        var after = r.TickAt(Sunset.AddMinutes(1));
+        Assert.Null(after.Hold);
+        Assert.Equal(Theme.Dark, r.Theme.Current);
+        Assert.Equal(1, r.Theme.Applies);
+    }
+
+    [Fact]
+    public void Auto_from_manual_is_quiet()
+    {
+        var r = new Rig(Noon, Theme.Light);
+        r.Engine.Start();
+        r.Engine.SetMode(Mode.Dark);
+        r.Engine.SetMode(Mode.Auto);
+        Assert.Equal(Theme.Light, r.Theme.Current);
+        Assert.Empty(r.Notifier.Switches);
+    }
+
+    [Fact]
+    public void Save_failure_does_not_throw()
+    {
+        var r = new Rig(Noon, Theme.Light);
+        r.Engine.Start();
+        r.Store.FailNextSaves = 1;
+        r.Engine.SetMode(Mode.Dark);
+        Assert.Equal(Mode.Auto, r.Store.State.Mode);
+        r.TickAt(Noon.AddMinutes(1));
+        Assert.Equal(Mode.Dark, r.Store.State.Mode);
+    }
+
+    [Fact]
+    public void Apply_failure_is_reported()
+    {
+        var r = new Rig(Noon, Theme.Light);
+        r.Engine.Start();
+        r.Theme.FailApply = true;
+        var snap = r.TickAt(Sunset.AddMinutes(1));
+        Assert.Equal(Theme.Light, snap.Applied);
+        Assert.Equal("Could not change the Windows theme", snap.Error);
+        r.Theme.FailApply = false;
+        snap = r.TickAt(Sunset.AddMinutes(2));
+        Assert.Equal(Theme.Dark, snap.Applied);
+        Assert.Null(snap.Error);
+    }
+
+    [Fact]
+    public void Outside_change_is_not_reverted_until_the_next_switch()
+    {
+        var r = new Rig(Noon, Theme.Light);
+        r.Engine.Start();
+        r.Theme.SetOutside(Theme.Dark);
+        Assert.Equal(Theme.Dark, r.TickAt(Noon.AddMinutes(1)).Applied);
+        Assert.Equal(0, r.Theme.Applies);
+        var tomorrowSunrise = ScheduleCalculator.Compute(Sunset.AddMinutes(1), Blantyre, new AppSettings().ToScheduleOptions()).Next!.At;
+        r.TickAt(tomorrowSunrise.AddMinutes(1));
+        Assert.Equal(Theme.Light, r.Theme.Current);
+    }
 }
