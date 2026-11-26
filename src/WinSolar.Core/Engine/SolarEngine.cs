@@ -32,6 +32,7 @@ public sealed class SolarEngine
     private (DateOnly Date, TransitionKind Kind)? headsUpShownFor;
     private bool outsideChange; // Windows was changed behind our back: keep it until the next switch passes
     private (DateOnly Date, TransitionKind Kind)? outsideSince;
+    private (Mode Mode, Hold? Hold) outsideUnder; // what the user had asked Win Solar for when Windows was changed
     private bool userAction;
     private string? error;
 
@@ -161,9 +162,13 @@ public sealed class SolarEngine
             applied = onScreen;
             outsideChange = true;
             outsideSince = prevId;
+            outsideUnder = (state.Mode, state.Hold);
         }
 
-        if (outsideChange && (outsideSince != prevId || state.Mode != Mode.Auto || state.Hold is not null)) outsideChange = false;
+        // It lasts until the user asks Win Solar for something else (mode, hold) or, in plain Auto, the next switch passes.
+        if (outsideChange && (outsideUnder != (state.Mode, state.Hold)
+                              || (state.Mode == Mode.Auto && state.Hold is null && outsideSince != prevId)))
+            outsideChange = false;
 
         if (decision.Theme != applied && !outsideChange)
         {

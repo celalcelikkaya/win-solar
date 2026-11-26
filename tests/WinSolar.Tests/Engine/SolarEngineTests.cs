@@ -303,4 +303,28 @@ public class SolarEngineTests
         r.TickAt(tomorrowSunrise.AddMinutes(1));
         Assert.Equal(Theme.Light, r.Theme.Current);
     }
+
+    [Fact]
+    public void Outside_change_during_a_pause_is_kept()
+    {
+        var r = new Rig(Noon, Theme.Light);
+        r.Engine.Start();
+        r.Engine.Pause(TimeSpan.FromHours(1));
+        r.Theme.SetOutside(Theme.Dark);
+        Assert.Equal(Theme.Dark, r.TickAt(Noon.AddMinutes(1)).Applied);
+        Assert.Equal(0, r.Theme.Applies);
+    }
+
+    [Fact]
+    public void Outside_change_in_manual_mode_is_kept_until_the_mode_changes()
+    {
+        var r = new Rig(Noon, Theme.Light);
+        r.Engine.Start();
+        r.Engine.SetMode(Mode.Light);
+        r.Theme.SetOutside(Theme.Dark);
+        Assert.Equal(Theme.Dark, r.TickAt(Noon.AddMinutes(1)).Applied);
+        Assert.Equal(0, r.Theme.Applies);
+        r.Engine.SetMode(Mode.Auto);
+        Assert.Equal(Theme.Light, r.Theme.Current);
+    }
 }

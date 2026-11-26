@@ -27,9 +27,10 @@ public sealed class RoomLightTracker(Thresholds thresholds)
     {
         Lux = lux;
         Theme? reading = lux <= Thresholds.DarkBelow ? Theme.Dark : lux >= Thresholds.LightAbove ? Theme.Light : null;
-        if (reading is not { } r) return; // between the thresholds: nothing changes
-        if (r == stable) candidate = null;
-        else if (candidate?.Theme != r) candidate = (r, at);
+        // A change must hold for the whole stability time: any reading off its side (back between the thresholds or
+        // on the stable side) cancels it. Between the thresholds the stable theme itself never changes.
+        if (reading != candidate?.Theme) candidate = null;
+        if (reading is { } r && r != stable && candidate is null) candidate = (r, at);
     }
 
     public Theme? Stable(DateTimeOffset now)

@@ -37,7 +37,7 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
 
 ## Commands (on Celal's laptop, repo at `D:\Projects\win-solar`)
 
-- Test: `dotnet test`  (123 tests, all passing after Plan 2)
+- Test: `dotnet test`  (126 tests, all passing after Plan 2)
 - Run: `dotnet run --project src\WinSolar.App` (quit the installed copy first; single instance)
 - Installer: `pwsh build\release.ps1` → `dist\WinSolarSetup-3.0.0.exe` (+ `SHA256SUMS.txt`)
 - C: has little free space: `NUGET_PACKAGES` points to `D:\.nuget\packages`; keep build output on D:.
@@ -114,6 +114,7 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
   and daytime hourly medians in log space (needs 6 hours of each, day ≥ 1.5× evening; else 60 / 150 lx).
   "Dark below 20%" includes 20% (as the demo). Weather requests allow 30 s (Open-Meteo took 8–17 s on the laptop's
   network) and retry after 5 min.
-- A theme changed in Windows Settings is kept until the next switch passes (not reverted on the next tick).
+- A theme changed in Windows Settings is kept until the next switch passes (not reverted on the next tick); during a
+  hold or manual mode it is kept until the user changes the mode or the hold.
 - No travel detection (Celal, 2026-11-26): the place is changed by hand in Settings.
 - Flyout hero has no phase chip ("Night", "Daytime") and the light reading has no pill (Celal, 2026-11-27).

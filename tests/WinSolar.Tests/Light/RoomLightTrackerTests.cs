@@ -39,6 +39,16 @@ public class RoomLightTrackerTests
     }
 
     [Fact]
+    public void Short_dip_back_to_the_middle_does_not_count()
+    {
+        var r = StableAt(Theme.Light);
+        r.Feed(T0, 10);
+        r.Feed(T0.AddSeconds(5), 100);
+        Assert.Equal(Theme.Light, r.Stable(T0.AddMinutes(3)));
+        Assert.Null(r.Pending);
+    }
+
+    [Fact]
     public void Between_thresholds_keeps_the_current_theme()
     {
         var r = StableAt(Theme.Dark);
