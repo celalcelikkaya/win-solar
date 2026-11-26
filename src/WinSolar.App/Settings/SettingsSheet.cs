@@ -2,11 +2,13 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 using WinSolar.App.Flyout;
 using WinSolar.App.Services;
 using WinSolar.App.Styling;
 using WinSolar.Core;
+using WinSolar.Core.Desktop;
 using WinSolar.Core.Power;
 using WinSolar.Core.Scheduling;
 using WinSolar.Core.Settings;
@@ -113,6 +115,32 @@ public static class SettingsSheet
                 Segmented<BatteryRule>([("No change", BatteryRule.NoChange), ("Dark below 20%", BatteryRule.DarkBelow20), ("Always dark", BatteryRule.AlwaysDark)],
                     s.Battery, v => ctx.Change(x => x with { Battery = v })), stacked: true)));
 
+        foreach (var (title, theme) in new[] { ("Day profile · Light theme", Core.Scheduling.Theme.Light), ("Night profile · Dark theme", Core.Scheduling.Theme.Dark) })
+        {
+            var p = theme == Core.Scheduling.Theme.Light ? s.Day : s.Night;
+            Func<AppSettings, Profile, AppSettings> set = theme == Core.Scheduling.Theme.Light ? (x, v) => x with { Day = v } : (x, v) => x with { Night = v };
+            body.Children.Add(Section(title));
+            var rows = new List<UIElement>();
+            if (ctx.Host.Desktop.AccentAvailable)
+                rows.Add(Row("Accent color", null, Swatches(p.Accent, v => ctx.Change(x => set(x, (theme == Core.Scheduling.Theme.Light ? x.Day : x.Night) with { Accent = v }))), stacked: true));
+            rows.Add(Row("Mouse pointer", null, Segmented<Pointer>([("White", Pointer.White), ("Black", Pointer.Black)], p.Pointer,
+                v => ctx.Change(x => set(x, (theme == Core.Scheduling.Theme.Light ? x.Day : x.Night) with { Pointer = v })))));
+            rows.Add(Row("Sounds", null, Segmented<Sounds>([("Normal", Sounds.Normal), ("Off", Sounds.Off)], p.Sounds,
+                v => ctx.Change(x => set(x, (theme == Core.Scheduling.Theme.Light ? x.Day : x.Night) with { Sounds = v })))));
+            body.Children.Add(Group(rows));
+        }
+
+        body.Children.Add(Section("Windows"));
+        body.Children.Add(Group(
+            Row("Switch animation", "How the screen changes over",
+                Segmented<SwitchAnimation>([("Roller", SwitchAnimation.Roller), ("Fade", SwitchAnimation.Fade), ("Instant", SwitchAnimation.Instant)],
+                    s.Animation, v => ctx.Change(x => x with { Animation = v })), stacked: true),
+            Row("Pointer and sounds follow the profile", "Off keeps your daytime pointer and sounds",
+                Switch(s.ProfilesFollow, v => ctx.Change(x => x with { ProfilesFollow = v }))),
+            Row("Taskbar and Start", "Follow the switch, or keep one theme",
+                Segmented<TaskbarTheme>([("Follow", TaskbarTheme.Follow), ("Always dark", TaskbarTheme.AlwaysDark), ("Always light", TaskbarTheme.AlwaysLight)],
+                    s.Taskbar, v => ctx.Change(x => x with { Taskbar = v })), stacked: true)));
+
         body.Children.Add(Section("General"));
         body.Children.Add(Group(
             Row("Start with Windows", "Starts quietly in the tray", Switch(s.StartWithWindows, v => { Autostart.Set(v); ctx.Change(x => x with { StartWithWindows = v }); })),
@@ -210,6 +238,32 @@ public static class SettingsSheet
         box.SetResourceReference(FrameworkElement.StyleProperty, "Switch");
         box.Click += (_, _) => changed(box.IsChecked == true);
         return box;
+    }
+
+    /// <summary>The eight accent swatches; the chosen one has a ring.</summary>
+    private static FrameworkElement Swatches(string selected, Action<string> picked)
+    {
+        var panel = new WrapPanel { Margin = new Thickness(0, 4, 0, 0) };
+        foreach (var hex in Accents.Swatches)
+        {
+            var color = (Color)ColorConverter.ConvertFromString(hex);
+            var dot = new Border
+            {
+                Width = 24,
+                Height = 24,
+                CornerRadius = new CornerRadius(12),
+                Margin = new Thickness(0, 0, 8, 0),
+                Background = new SolidColorBrush(color),
+                BorderThickness = new Thickness(hex == selected ? 2.5 : 0),
+                Cursor = System.Windows.Input.Cursors.Hand,
+                ToolTip = hex,
+            };
+            dot.SetResourceReference(Border.BorderBrushProperty, "Ink");
+            dot.MouseLeftButtonUp += (_, _) => picked(hex);
+            panel.Children.Add(dot);
+        }
+
+        return panel;
     }
 
     internal static FrameworkElement Segmented<T>((string Label, T Value)[] options, T selected, Action<T> picked)
