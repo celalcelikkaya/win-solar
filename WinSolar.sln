@@ -7,6 +7,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WinSolar.Core", "src\WinSol
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WinSolar.Tests", "tests\WinSolar.Tests\WinSolar.Tests.csproj", "{7D2F3B21-4C5E-4F60-9BAC-1D2E3F4A5B62}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WinSolar.App", "src\WinSolar.App\WinSolar.App.csproj", "{8E3A4C32-5D6F-4071-AC0D-2E3F4A5B6C73}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -21,5 +23,9 @@ Global
 		{7D2F3B21-4C5E-4F60-9BAC-1D2E3F4A5B62}.Debug|x64.Build.0 = Debug|x64
 		{7D2F3B21-4C5E-4F60-9BAC-1D2E3F4A5B62}.Release|x64.ActiveCfg = Release|x64
 		{7D2F3B21-4C5E-4F60-9BAC-1D2E3F4A5B62}.Release|x64.Build.0 = Release|x64
+		{8E3A4C32-5D6F-4071-AC0D-2E3F4A5B6C73}.Debug|x64.ActiveCfg = Debug|x64
+		{8E3A4C32-5D6F-4071-AC0D-2E3F4A5B6C73}.Debug|x64.Build.0 = Debug|x64
+		{8E3A4C32-5D6F-4071-AC0D-2E3F4A5B6C73}.Release|x64.ActiveCfg = Release|x64
+		{8E3A4C32-5D6F-4071-AC0D-2E3F4A5B6C73}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 EndGlobal
