@@ -11,16 +11,24 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
 - Clickable demo of the target look and every planned feature: `docs/superpowers/specs/win-solar-demo.html`
   (open in a browser; this is the visual reference for all UI work)
 - Plan 1 (done): `docs/superpowers/plans/2026-11-26-win-solar-v3-plan-1-foundation.md`
+- Plan 2 (done): `docs/superpowers/plans/2026-11-26-win-solar-v3-plan-2-real-light-battery-travel.md` (travel dropped)
 - Core logic, no Windows APIs, fully unit-tested: `src/WinSolar.Core`
   - `Sun/SunCalculator.cs` offline NOAA sun times (port of v2 `src/lib/sun.ts`) + sun elevation
   - `Scheduling/ScheduleCalculator.cs` prev/next/after switch, phase, progress, in the **place's** time zone;
-    `adjust` hook is where Plan 2 moves sunrise/sunset for weather
+    `adjust` hook moves sunrise/sunset for weather (`Light/LightModel.Adjust`)
   - `Decisions/ThemeDecider.cs` priority Manual > Battery > Hold > Room light > Schedule; `ShouldDefer` (full screen)
   - `Engine/SolarEngine.cs` the heart: Start/Tick, heads-up, holds (snooze/skip/pause/switch now), shortcut, NextDue
-  - `Settings/` `AppSettings`, `AppState`, atomic `JsonFileStore` (`%AppData%\Win Solar\settings.json`, `state.json`)
+  - `Settings/` `AppSettings`, `AppState`, `LearnedState`, atomic `JsonFileStore` (`%AppData%\Win Solar\settings.json`,
+    `state.json` owned by the engine, `learned.json` owned by the App services, `log.txt`)
+  - `Light/` outdoor light model + weather factor + light window, Open-Meteo parsing, `RoomLightTracker` (hysteresis +
+    2-min stability), `Calibration` (self-learned thresholds); `Power/Battery.cs` battery rules
+  - Engine ports for Plan 2: `IPower`, `IRoomLight`, `IWeather` (`Engine/Ports.cs`); snapshot has `Light`, `Power`,
+    `BatteryDark`, `Error`
 - WPF app: `src/WinSolar.App`
   - `Services/EngineHost.cs` one timer at the engine's next due moment + wake/unlock/time-change re-checks
   - `Services/WindowsServices.cs` theme via registry + `WM_SETTINGCHANGE`, full-screen probe
+  - `Services/LightSensorService.cs` (WinRT LightSensor), `PowerService.cs` (PowerManager), `WeatherService.cs`
+    (Open-Meteo, hourly, only without a sensor), `LearnedStore.cs`, `Log.cs`
   - `Flyout/FlyoutWindow.cs` the tray flyout (built in code), `Settings/SettingsSheet.cs` settings + location sheets
   - `Notify/` own notification card (no Windows toasts), OSD for the shortcut; `Tray/` NotifyIcon + menu + glyphs
   - `Theme/` `Light.xaml` / `Dark.xaml` brush tokens (swapped by `ThemeManager`), `Controls.xaml` styles, `Ui.cs` helpers
@@ -29,7 +37,7 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
 
 ## Commands (on Celal's laptop, repo at `D:\Projects\win-solar`)
 
-- Test: `dotnet test`  (59 tests, all passing at handover)
+- Test: `dotnet test`  (123 tests, all passing after Plan 2)
 - Run: `dotnet run --project src\WinSolar.App` (quit the installed copy first; single instance)
 - Installer: `pwsh build\release.ps1` → `dist\WinSolarSetup-3.0.0.exe` (+ `SHA256SUMS.txt`)
 - C: has little free space: `NUGET_PACKAGES` points to `D:\.nuget\packages`; keep build output on D:.
@@ -46,11 +54,16 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
   avoided on purpose (they would shadow types): use `Styling`, `Scheduling`, `Decisions`, `SettingsUi`.
 - Work on a branch; merge to `main` after Celal approves.
 
-## State (2026-11-26)
+## State (2026-11-27)
 
 - Plan 1 (foundation + v2 parity) is built, installed on Celal's laptop and merged to `main`: tray icon with live
   sun/moon, flyout, settings, location search + Windows location, heads-up card with Snooze/Skip/Switch now that
   tucks into the tray, wait for full screen, Win + Shift + D with OSD, start with Windows, installer.
+- Plan 2 (branch `feat/plan-2-real-light`) adds: Plan 1 review fixes (outside theme changes respected, errors logged
+  and shown on the tray, quiet Auto/Resume, Switch now follows the schedule), real light (sensor first, weather
+  without a sensor), battery mode, settings rows, flyout light reading and banners. Installed on the laptop.
+  Not yet seen live: the battery banner/card (needs unplugging below 20%) and the weather chip (the laptop has a
+  sensor; the weather path was checked once with the sensor forced off: sunrise moved 04:58 → 05:00).
 - Celal's laptop: Huawei WRT-WX9, i5-8265U, 8 GB RAM, 2160x1440 (200%), Windows 11 Home 26H2, **has a working
   ambient light sensor** (`Windows.Devices.Sensors.LightSensor`; evening room ≈ 70–180 lx; it only reports while a
   `ReadingChanged` subscriber exists / `ReportInterval` is set).
@@ -73,9 +86,6 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
 
 ## Next (one plan each, written with `superpowers:writing-plans`, executed with `superpowers:executing-plans`)
 
-- Plan 2: real light (light sensor with hysteresis + 2-min stability + self-calibration; Open-Meteo cloud cover when
-  there is no sensor, moving a switch by at most 30/60/90 min), battery mode (No change / Dark below 20% / Always
-  dark), travel detection (time-zone change → new place, asks when "Follow me" is off).
 - Plan 3: Roller / Fade / Instant switch overlay (screen capture shown topmost, theme applied underneath, soft-edged
   wipe top→bottom ~1.6 s), Day/Night profiles (accent if reliable, pointer White/Black, sounds Normal/Off),
   taskbar theme Follow / Always dark / Always light.
@@ -83,9 +93,8 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
   solar/h24/apr metadata), save + restore the user's own wallpaper, welcome screen with every feature on.
 - Plan 5: in-app updates from GitHub Releases, Defender false-positive submission + checksums in the release
   checklist, remove the Electron code, final review.
-- Plan 1's final whole-branch review was not run (Celal asked to hand over); do one before Plan 2 builds on it.
 
-## Decisions made during Plan 1 (check before changing)
+## Decisions (check before changing)
 
 - Heads-up and notices are Win Solar's own WPF card, not Windows toasts (toasts can't be styled); not kept in the
   notification center; "do not disturb" is honoured best effort (`SHQueryUserNotificationState` + `ToastEnabled`).
@@ -100,3 +109,11 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
 - "Start with Windows" writes the Run key automatically only for the installed copy (not from `bin/`).
 - Sounds per profile will be Normal/Off only (no clean "Quiet" in Windows). No paid code signing for now: free
   measures only (version info, per-user, no PowerShell, Defender submission, README SmartScreen note).
+- Plan 2: the sensor decides when there is one; weather (Open-Meteo cloud cover → factor `1 − 0.7·(cloud/100)^1.5`,
+  storm codes 95–99 → 0.12) only without a sensor. Learned thresholds sit at 35% / 65% between this room's evening
+  and daytime hourly medians in log space (needs 6 hours of each, day ≥ 1.5× evening; else 60 / 150 lx).
+  "Dark below 20%" includes 20% (as the demo). Weather requests allow 30 s (Open-Meteo took 8–17 s on the laptop's
+  network) and retry after 5 min.
+- A theme changed in Windows Settings is kept until the next switch passes (not reverted on the next tick).
+- No travel detection (Celal, 2026-11-26): the place is changed by hand in Settings.
+- Flyout hero has no phase chip ("Night", "Daytime") and the light reading has no pill (Celal, 2026-11-27).

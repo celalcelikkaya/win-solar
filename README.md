@@ -7,7 +7,8 @@
 ## Win Solar 3 (native Windows app, branch `v3-wpf`)
 
 Win Solar 3 is a rewrite in C# .NET 8 + WPF: much lighter than the Electron version, no PowerShell, a flyout that
-slides in from the taskbar, a quiet heads-up card before each switch, Win + Shift + D, and an installer that removes
+slides in from the taskbar, a quiet heads-up card before each switch, Win + Shift + D, real light (the PC's light
+sensor, or cloud cover from Open-Meteo when there is none), dark on low battery, and an installer that removes
 Win Solar 2 for you.
 
 - Build and test: `dotnet test`, then `dotnet run --project src/WinSolar.App`
