@@ -6,7 +6,7 @@
 
 **Architecture:** `WinSolar.Core` (net8.0, no Windows APIs) holds the sun math, schedule, decision priority and a `SolarEngine` that talks to the outside world only through small interfaces, so all behaviour is unit-tested with fakes. `WinSolar.App` (WPF) implements those interfaces with Windows APIs and draws the tray, flyout and settings. One timer fires at the next due moment; there is no polling.
 
-**Tech Stack:** .NET 8, WPF, C# latest, xUnit, CommunityToolkit.Mvvm 8.4.2 (as Harbor), H.NotifyIcon.Wpf 2.1.x (tray), CommunityToolkit.WinUI.Notifications 7.1.2 (toasts), Inno Setup 6.
+**Tech Stack:** .NET 8, WPF, C# latest, xUnit, CommunityToolkit.Mvvm 8.4.2 (as Harbor), built-in WinForms NotifyIcon (tray), Inno Setup 6.
 
 **Spec:** `docs/superpowers/specs/2026-11-26-win-solar-wpf-design.md` (approved). Visual reference: `docs/superpowers/specs/win-solar-demo.html`.
 
@@ -431,19 +431,32 @@ The heart: one `Tick()` that decides, defers, applies, raises the heads-up and p
 
 ---
 
-### Task 12: Notifications and shortcut
+### Task 12: Win Solar notification card and shortcut
 
 **Files:**
-- Create: `src/WinSolar.App/Services/ToastNotifier.cs`, `Services/Hotkey.cs`, `Flyout/Osd.xaml(.cs)`
+- Create: `src/WinSolar.App/Notify/NoticeCard.xaml(.cs)`, `Notify/CardNotifier.cs`, `Services/Hotkey.cs`, `Flyout/Osd.xaml(.cs)`
+- Modify: `Tray/TrayIcon.cs` (breathing glyph while a tucked heads-up is pending), `App.xaml.cs` (replace `SilentNotifier`)
 
 **Interfaces:**
-- Consumes: `INotifier`, `SolarEngine.Shortcut()`, engine actions.
-- Produces: `ToastNotifier : INotifier` (CommunityToolkit.WinUI.Notifications; activation arguments `action=snooze|skip|now` routed to the engine; heads-up toast uses tag `headsup` so `DismissHeadsUp` removes it and the countdown updates by replacing it); `Hotkey.Register(ModifierKeys.Windows | ModifierKeys.Shift, Key.D, Action onPress) → bool` via `RegisterHotKey` on a message-only window.
-- Copy (spec): heads-up title "Switching to Dark in 4 min", body "Sunset at 17:55", buttons "Snooze 15 min", "Skip", "Switch now"; after switch "Switched to Dark theme" / "Next: Light at 05:14 tomorrow"; after full screen "Waited until you left full screen."; OSD "Dark theme" + detail from `Shortcut()`, shown 1.8 s bottom-center above the taskbar.
+- Consumes: `INotifier`, `SolarEngine.Snooze/Skip/SwitchNow/Shortcut()`, `TaskbarEdge.Get()` (Task 9).
+- Produces: `CardNotifier : INotifier` (own WPF card, no Windows toast, spec "Heads-up before a switch");
+  `Hotkey.Register(ModifierKeys.Windows | ModifierKeys.Shift, Key.D, Action onPress) → bool` via `RegisterHotKey` on a
+  message-only window; `TrayIcon.SetBreathing(bool on)`.
+- Card values (spec + demo): ~320 DIP wide, radius 16, `WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW`, topmost, 12 DIP above
+  the taskbar on the tray side (left of the flyout when it is open); in: 12 DIP slide + fade 0.5 s; heads-up: ring
+  around the target glyph emptying over the last 5 minutes, title "Dark in 5 min", line "Cloudy sky · 17:40" /
+  "Sunset · 17:55", hover reveals "Snooze 15 min" / "Skip" / "Switch now" and the close button, tucks toward the tray
+  after 8 s untouched (hover pauses, leaving re-arms 4 s), then `SetBreathing(true)` until `DismissHeadsUp`.
+  Other notices: "Switched to Dark theme" + "Next: Light at 05:14 tomorrow", "Waited until you left full screen.",
+  fade after 6.5 s. Skip all cards when `SHQueryUserNotificationState` reports quiet time / not accepting
+  notifications; OSD "Dark theme" + detail from `Shortcut()`, 1.8 s, bottom-center above the taskbar.
 
 - [ ] **Step 1: Implement.** If `Register` returns false, Settings shows "Win + Shift + D is used by another app."
-- [ ] **Step 2: Manual check** — set the sunset offset so the switch is 6 minutes away: toast appears at 5 min with buttons, Snooze works from the toast with the flyout closed; play a full-screen video across the switch: no switch until Esc, then it switches and the toast says it waited; Win + Shift + D flips with the OSD.
-- [ ] **Step 3: Commit** — `feat(app): heads-up toasts and Win+Shift+D shortcut`
+- [ ] **Step 2: Manual check** — set the sunset offset so the switch is 6 minutes away: the card appears at 5 min
+  without taking focus from the window you're typing in; buttons appear on hover and Snooze works; untouched it tucks
+  into the tray and the icon breathes; with Do not disturb on, no card; play a full-screen video across the switch: no
+  switch until Esc, then it switches and the card says it waited; Win + Shift + D flips with the OSD.
+- [ ] **Step 3: Commit** — `feat(app): notification card and Win+Shift+D shortcut`
 
 ---
 

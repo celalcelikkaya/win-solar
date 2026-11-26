@@ -105,9 +105,20 @@ switch right after the user leaves full screen. Manual changes and the shortcut 
 
 ### Heads-up before a switch
 
-5 minutes before an automatic switch, a Windows toast notification with **Snooze 15 min**, **Skip** and **Switch now**.
-Shown even when the flyout is closed. Not shown in full screen, sensor mode or battery mode. The flyout shows the same
-as a banner while the toast is up.
+5 minutes before an automatic switch Win Solar shows **its own card** (Celal's decision, 2026-11-26), not a Windows
+toast: Windows toasts cannot be styled and felt loud. The card, as in the demo:
+- Small glass card (about 320 × 60 DIP, radius 16, Mica/acrylic, hairline border, soft shadow) above the tray,
+  following the system theme. Slides up 12 DIP and fades in over ~0.5 s.
+- Left: the target theme's glyph (moon/sun) inside a thin ring that empties as the switch approaches.
+- Text: "Dark in 5 min" (bold) and "Cloudy sky · 17:40" or "Sunset · 17:55".
+- Snooze 15 min / Skip / Switch now are quiet text buttons, shown only on hover or keyboard focus; the close button too.
+- Untouched for 8 s it shrinks toward the tray and disappears (hover pauses this). The tray icon then breathes softly
+  until the switch, and the flyout keeps its heads-up banner, so the user is told once and never nagged.
+- Never steals focus, no sound, not shown in full screen, sensor mode or battery mode, and not shown while Windows
+  "Do not disturb" / quiet hours is on (`SHQueryUserNotificationState` = `QUNS_QUIET_TIME` or not
+  `QUNS_ACCEPTS_NOTIFICATIONS`); the tray breathing and banner still happen.
+- Other notices ("Switched to Dark theme", battery, travel) use the same card without the ring and fade out after
+  6.5 s. They are not kept in the Windows notification center.
 
 ### Applying a theme
 
@@ -272,7 +283,7 @@ repo once v3 reaches parity, on a branch, merged after Celal approves.
 ## Left to the builder
 
 Exact XAML styling within the demo's look, threshold-learning algorithm details, weather-factor mapping curve,
-library choices (e.g. tray icon, notifications), test design, task order.
+library choices (e.g. tray icon), test design, task order.
 
 ## Decided with Celal
 
