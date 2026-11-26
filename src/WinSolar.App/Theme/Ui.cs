@@ -49,6 +49,11 @@ public static class Icons
     public static readonly Geometry Locate = G("M5,12 A7,7 0 1 0 19,12 A7,7 0 1 0 5,12 M12,2 V5 M12,19 V22 M2,12 H5 M19,12 H22");
     public static readonly Geometry Power = G("M12,2 V12 M18.36,6.64 A9,9 0 1 1 5.64,6.64");
 
+    public static readonly Geometry Bulb = G("M15,14 C15.2,13 15.7,12.3 16.5,11.5 C17.5,10.6 18,9.3 18,8 A6,6 0 0 0 6,8 C6,9 6.2,10.2 7.5,11.5 C8.2,12.2 8.8,13 9,14 M9,18 H15 M10,22 H14");
+    public static readonly Geometry Cloud = G("M17.5,19 H9 A7,7 0 1 1 15.71,10 H17.5 A4.5,4.5 0 1 1 17.5,19 Z");
+    public static readonly Geometry Storm = G("M6,16.326 A7,7 0 1 1 15.71,8 H17.5 A4.5,4.5 0 0 1 18,16.973 M13,12 L10,17 H14 L11,22");
+    public static readonly Geometry Bolt = G("M13,2 L3,14 H12 L11,22 L21,10 H12 Z");
+
     public static Geometry For(Theme theme) => theme == Theme.Light ? Sun : Moon;
 }
 

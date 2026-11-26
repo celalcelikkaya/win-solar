@@ -7,6 +7,7 @@ using WinSolar.App.Flyout;
 using WinSolar.App.Services;
 using WinSolar.App.Styling;
 using WinSolar.Core;
+using WinSolar.Core.Power;
 using WinSolar.Core.Scheduling;
 using WinSolar.Core.Settings;
 
@@ -62,6 +63,32 @@ public static class SettingsSheet
         }
 
         var place = ctx.Host.Last?.Place;
+        if (s.Source == ScheduleSource.Sun)
+        {
+            var light = ctx.Host.Light;
+            schedule.Add(Row("Follow the real light",
+                light.Available ? "Uses the light sensor in this PC" : $"No light sensor found. Uses the weather in {place?.Name ?? "your city"}",
+                Switch(s.FollowRealLight, v => ctx.Change(x => x with { FollowRealLight = v }))));
+            if (s.FollowRealLight)
+            {
+                schedule.Add(Row("Move a switch by at most", "So a lamp or a passing cloud never flips the theme at noon",
+                    Segmented<int>([("30 min", 30), ("1 hour", 60), ("1.5 hours", 90)], s.MaxShiftMin,
+                        v => ctx.Change(x => x with { MaxShiftMin = v })), stacked: true));
+                if (light.Available)
+                {
+                    var t = light.Thresholds;
+                    var reset = Ui.Button("Pill", "Reset learning", () =>
+                    {
+                        light.ResetLearning();
+                        ctx.Flyout.RebuildSheet(b => Build(b, ctx));
+                    });
+                    reset.VerticalAlignment = VerticalAlignment.Center;
+                    schedule.Add(Row("Room light",
+                        $"Dark below {t.DarkBelow:0} lx, light above {t.LightAbove:0} lx · {(light.Learned ? "learned" : "learning this room")}", reset));
+                }
+            }
+        }
+
         var locationButton = Ui.Button("FlatButton", LinkRow("Location", place is null ? "" : string.Join(", ", new[] { place.Name, place.Country }.Where(x => !string.IsNullOrEmpty(x)))),
             () => ctx.Flyout.OpenSheet("Location", b => LocationSheet.Build(b, ctx)));
         locationButton.HorizontalContentAlignment = HorizontalAlignment.Stretch;
@@ -77,6 +104,12 @@ public static class SettingsSheet
             Row("Manual mode ends by itself", "Light or Dark goes back to Auto at the next switch", Switch(s.ManualEndsByItself, v => ctx.Change(x => x with { ManualEndsByItself = v }))),
             Row("Keyboard shortcut", shortcutHint, Switch(s.Shortcut, v => { ctx.SetShortcut(v); ctx.Change(x => x with { Shortcut = v }); })),
             Row("Notify after switching", null, Switch(s.NotifyAfterSwitch, v => ctx.Change(x => x with { NotifyAfterSwitch = v })))));
+
+        body.Children.Add(Section("Battery"));
+        body.Children.Add(Group(
+            Row("On battery", "Dark pixels use less power on OLED screens",
+                Segmented<BatteryRule>([("No change", BatteryRule.NoChange), ("Dark below 20%", BatteryRule.DarkBelow20), ("Always dark", BatteryRule.AlwaysDark)],
+                    s.Battery, v => ctx.Change(x => x with { Battery = v })), stacked: true)));
 
         body.Children.Add(Section("General"));
         body.Children.Add(Group(

@@ -87,6 +87,10 @@ public sealed class CardNotifier : INotifier
         var settings = host.Store.Settings;
         var line = cause == Cause.FullScreenEnded
             ? "Waited until you left full screen."
+            : cause == Cause.Battery
+            ? $"Battery at {host.Power.Read().Percent}%. Your schedule comes back when you plug in."
+            : cause == Cause.Room
+            ? $"The room got {(theme == Theme.Dark ? "darker" : "brighter")}"
             : next is null ? "" : $"Next: {next.Theme} at {Format.When(next.At, DateTimeOffset.Now, host.Last?.Place.TimeZoneId ?? "UTC", settings.Hour12)}";
         var card = new NoticeCard(theme, $"Switched to {theme} theme", line, withRing: false, quiet: false) { AutoHide = TimeSpan.FromSeconds(6.5) };
         card.Gone += _ => { infos.Remove(card); Layout(); };
@@ -147,6 +151,8 @@ public sealed class CardNotifier : INotifier
     {
         var tz = host?.Last?.Place.TimeZoneId ?? "UTC";
         var time = Format.When(next.At, DateTimeOffset.Now, tz, host?.Store.Settings.Hour12 ?? false);
+        if (next.ShiftMinutes != 0 && host?.Weather.At(next.At) is { } weather)
+            return $"{WinSolar.Core.Light.LightModel.WeatherLabel(weather)} sky · {time}";
         var kind = next.Kind switch { TransitionKind.Sunset => "Sunset", TransitionKind.Sunrise => "Sunrise", _ => "Scheduled" };
         return $"{kind} · {time}";
     }

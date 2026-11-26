@@ -13,6 +13,7 @@ using WinSolar.App.Styling;
 using WinSolar.Core;
 using WinSolar.Core.Decisions;
 using WinSolar.Core.Engine;
+using WinSolar.Core.Light;
 using WinSolar.Core.Presentation;
 using WinSolar.Core.Scheduling;
 using WinSolar.Core.Sun;
@@ -42,6 +43,8 @@ public sealed class FlyoutWindow : Window
     // hero
     private readonly Dictionary<Phase, Border> skies = [];
     private readonly ContentControl chipContent = new();
+    private readonly ContentControl envContent = new();
+    private Border envChip = null!;
     private readonly TextBlock heroClock;
     private readonly Canvas stars = new();
     private readonly Path progressArc;
@@ -491,6 +494,15 @@ public sealed class FlyoutWindow : Window
         SetPhase(sc.Phase);
         var phaseLabel = sc.Phase switch { Phase.Day => "Daytime", Phase.Dawn => "Dawn", Phase.Dusk => "Dusk", _ => "Night" };
         chipContent.Content = HeroRow(Ui.Glyph(sc.Theme, 13), phaseLabel);
+        var env = s.Light.Source switch
+        {
+            LightSource.Sensor when s.Light.Lux is { } lux => HeroRow(Ui.Icon(Icons.Bulb, 13, "OnHero"), $"{lux:0} lx"),
+            LightSource.Weather when s.Light.Weather is { } w => HeroRow(Ui.Icon(w.Storm ? Icons.Storm : w.CloudCover < 25 ? Icons.Sun : Icons.Cloud, 13, "OnHero"), LightModel.WeatherLabel(w)),
+            LightSource.WeatherUnavailable => HeroRow(Ui.Icon(Icons.Cloud, 13, "OnHero"), "Weather unavailable"),
+            _ => null,
+        };
+        envContent.Content = env;
+        envChip.Visibility = env is null ? Visibility.Collapsed : Visibility.Visible;
         heroClock.Text = Time(now);
         prevTime.Content = sc.Prev is { } p ? HeroRow(Ui.Icon(KindIcon(p.Kind), 14, "OnHero"), Time(p.At)) : HeroRow(null, "--:--");
         nextTime.Content = sc.Next is { } n ? HeroRow(null, Time(n.At), Ui.Icon(KindIcon(n.Kind), 14, "OnHero")) : HeroRow(null, "--:--");
@@ -502,6 +514,10 @@ public sealed class FlyoutWindow : Window
                 : next.Kind == TransitionKind.Sunset ? "Until sunset"
                 : next.Kind == TransitionKind.Sunrise ? "Until sunrise" : "Until the scheduled time";
             captionText.Text = $"{label} · {When(next.At)}";
+            if (s.Mode == Mode.Auto && s.Light.Source == LightSource.Sensor)
+                captionText.Text = $"{label} around {When(next.At)} · follows the room light";
+            else if (s.Mode == Mode.Auto && s.Light.Source == LightSource.Weather && next.ShiftMinutes != 0 && s.Light.Weather is { } wx)
+                captionText.Text += $" · {LightModel.WeatherLabel(wx).ToLowerInvariant()} sky, {Math.Abs(next.ShiftMinutes)} min {(next.ShiftMinutes < 0 ? "before" : "after")} {(next.Kind == TransitionKind.Sunset ? "sunset" : "sunrise")}";
         }
         else
         {
@@ -528,8 +544,8 @@ public sealed class FlyoutWindow : Window
             : t.Polar == PolarState.Day ? "24 h" : t.Polar == PolarState.Night ? "0 min" : "--";
         if (settings.Source == ScheduleSource.Sun)
         {
-            SetTile(0, Icons.Sunrise, "Sunrise", Time(t.Sunrise), settings.OffsetSunriseMin != 0 ? $"Light at {Time(sc.TodayLight?.At)}" : "");
-            SetTile(1, Icons.Sunset, "Sunset", Time(t.Sunset), settings.OffsetSunsetMin != 0 ? $"Dark at {Time(sc.TodayDark?.At)}" : "");
+            SetTile(0, Icons.Sunrise, "Sunrise", Time(t.Sunrise), settings.OffsetSunriseMin != 0 || sc.TodayLight?.ShiftMinutes is not (null or 0) ? $"Light at {Time(sc.TodayLight?.At)}" : "");
+            SetTile(1, Icons.Sunset, "Sunset", Time(t.Sunset), settings.OffsetSunsetMin != 0 || sc.TodayDark?.ShiftMinutes is not (null or 0) ? $"Dark at {Time(sc.TodayDark?.At)}" : "");
             SetTile(2, Icons.Sun, "Solar noon", Time(t.Noon), "");
             SetTile(3, Icons.Timer, "Day length", dayLen, "");
         }
@@ -556,6 +572,17 @@ public sealed class FlyoutWindow : Window
             var due = s.Mode == Mode.Auto ? (s.Hold?.Theme ?? s.Schedule.Theme) : s.Applied;
             key = $"wait{due}";
             build = () => Banner("WarnSoft", "WarnLine", Icons.Expand, $"{due} theme is due. It switches when you leave full screen.");
+        }
+        else if (s.BatteryDark && s.Mode == Mode.Auto)
+        {
+            var percent = s.Power.Percent is { } p ? $" ({p}%)" : "";
+            key = $"bat{percent}";
+            build = () => Banner("AccentSoft", "AccentLine", Icons.Bolt, $"Dark while on battery{percent}. Your schedule comes back when you plug in.");
+        }
+        else if (s.Mode == Mode.Auto && s.Hold is null && s.Light is { Source: LightSource.Sensor, InWindow: true, Pending: { } pending })
+        {
+            key = $"room{pending.Theme}";
+            build = () => Banner("AccentSoft", "AccentLine", Icons.Bulb, $"The room is getting {(pending.Theme == Core.Scheduling.Theme.Dark ? "darker" : "brighter")}. Checking that it lasts…");
         }
         else if (s.HeadsUp is { } hu)
         {
@@ -754,11 +781,15 @@ public sealed class FlyoutWindow : Window
         AddSky(grid, Phase.Night, (0, "#0A1330"), (1, "#1A2A5C"));
         grid.Resources["OnHero"] = White;
 
-        var chip = new Border { CornerRadius = new CornerRadius(999), Padding = new Thickness(9, 4, 9, 4), Background = Frozen(Color.FromArgb(0x2E, 0xFF, 0xFF, 0xFF)), Child = chipContent, HorizontalAlignment = HorizontalAlignment.Left };
+        var chip = new Border { CornerRadius = new CornerRadius(999), Padding = new Thickness(9, 4, 9, 4), Background = Frozen(Color.FromArgb(0x2E, 0xFF, 0xFF, 0xFF)), Child = chipContent };
         clock = new TextBlock { Foreground = White, FontWeight = FontWeights.SemiBold, FontSize = 12 };
         var clockBox = new Border { CornerRadius = new CornerRadius(999), Padding = new Thickness(8, 3, 8, 3), Background = Frozen(Color.FromArgb(0x2E, 0, 0, 0)), Child = clock, HorizontalAlignment = HorizontalAlignment.Right };
+        envChip = new Border { CornerRadius = new CornerRadius(999), Padding = new Thickness(9, 4, 9, 4), Margin = new Thickness(6, 0, 0, 0), Background = Frozen(Color.FromArgb(0x2E, 0xFF, 0xFF, 0xFF)), Child = envContent, Visibility = Visibility.Collapsed };
+        var chips = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Left };
+        chips.Children.Add(chip);
+        chips.Children.Add(envChip);
         var top = new Grid();
-        top.Children.Add(chip);
+        top.Children.Add(chips);
         top.Children.Add(clockBox);
 
         var canvas = new Canvas { Width = 320, Height = 118 };
