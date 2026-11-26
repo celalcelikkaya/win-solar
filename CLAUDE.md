@@ -55,18 +55,20 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
   ambient light sensor** (`Windows.Devices.Sensors.LightSensor`; evening room ≈ 70–180 lx; it only reports while a
   `ReadingChanged` subscriber exists / `ReportInterval` is set).
 
-### Known issues reported by Celal at handover (fix these first)
+### Known issues from the handover (fixed 2026-11-26 on `fix/flyout-stutter-and-logo`)
 
-1. **The flyout stutters while sliding up.** Likely causes: `AllowsTransparency=True` layered window plus a
-   `DropShadowEffect` on a full-size border (software rendering of the whole surface each frame), and content
-   being rebuilt/laid out on show. Ideas: render the shadow as a pre-blurred image or use a smaller/cached effect
-   (`CacheMode = new BitmapCache()`), build content once and only update values, call `UpdateLayout` before starting
-   the animation, animate a cached visual, or try a borderless non-transparent window with DWM rounded corners + Mica
-   and animate content only. Measure before/after.
-2. **No logo:** the Start menu shows "WinSolar" with a generic icon. `build/icon.ico` is fine (16–256 px). Check
-   that the published `WinSolar.exe` really carries the icon (`<ApplicationIcon>`), that the Start shortcut is the
-   installer's "Win Solar" one, and that Windows' icon cache isn't stale. The flyout/settings also have no logo yet:
-   add the Win Solar mark (sun/moon) to the About row and the tray.
+1. **Flyout stutter: fixed.** Measured on the laptop: ~36.7 ms/frame (~28 fps) while sliding. Three causes, each
+   measured: the per-pixel transparent (layered) window, the `DropShadowEffect` on the whole surface, and the sun
+   sweep starting on the same frames. Now the window is opaque, DWM draws corners/border/shadow, the window itself
+   moves (`SetWindowPos`) and fades (constant layered alpha), and the sweep starts after the slide: 18.4 ms mean.
+   The notification card (`Notify/NoticeCard.cs`) still uses the old transparent + shadow approach; it is small and
+   nobody reported it, but use the same technique if it ever stutters.
+2. **"WinSolar" with a generic icon in Start: fixed.** Root cause was the installer, not the icon: the v2 NSIS
+   uninstaller returned at once and its %TEMP% copy deleted `Programs\Win Solar` and the `Win Solar` shortcut after
+   v3 was installed (same names). The 3.0.0 install on the laptop was left with only the 3 locked files and could not
+   start again. The Start entry seen was a stale `WinSolar.lnk` from the v2 portable build. The installer now runs
+   the v2 uninstaller with `_?=` (synchronous) and deletes that stale shortcut; the laptop was reinstalled.
+   The Win Solar mark is in About and the tray menu title row; the exe's FileDescription is "Win Solar".
 3. **Dynamic wallpaper is not there yet**: expected, it is Plan 4.
 
 ## Next (one plan each, written with `superpowers:writing-plans`, executed with `superpowers:executing-plans`)
@@ -92,8 +94,9 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
   doesn't target net8). DPI stays in `app.manifest` (PerMonitorV2); `WFAC010` is suppressed for that reason.
 - Fallback place (until the user picks one): popular city in the same IANA zone, else same UTC offset, else an
   approximate place (`Core/Places.cs`). The PC zone maps Blantyre to Africa/Johannesburg, hence the offset step.
-- Flyout is our own rounded transparent window (not Mica) so it can slide and fade; UI is built in C# with styles
-  from `Theme/Controls.xaml` rather than per-view XAML.
+- Flyout is an opaque window framed by DWM (Windows 11 rounded corners, border colour, shadow; square on Windows 10)
+  that slides and fades as a whole window: changed from a transparent window because that stuttered (see Known
+  issues). No Mica. UI is built in C# with styles from `Theme/Controls.xaml` rather than per-view XAML.
 - "Start with Windows" writes the Run key automatically only for the installed copy (not from `bin/`).
 - Sounds per profile will be Normal/Off only (no clean "Quiet" in Windows). No paid code signing for now: free
   measures only (version info, per-user, no PowerShell, Defender submission, README SmartScreen note).
