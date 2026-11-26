@@ -1,3 +1,4 @@
+using WinSolar.Core.Desktop;
 using WinSolar.Core.Scheduling;
 using WinSolar.Core.Power;
 using WinSolar.Core.Settings;
@@ -29,4 +30,17 @@ public class CompatTests
     [Fact]
     public void Room_light_mode_uses_sun_times_for_its_schedule() =>
         Assert.Equal(ScheduleSource.Sun, new AppSettings { Source = ScheduleSource.RoomLight }.ToScheduleOptions().Source);
+
+    [Fact]
+    public void Plan_2_settings_get_profile_defaults()
+    {
+        var dir = Directory.CreateTempSubdirectory().FullName;
+        File.WriteAllText(Path.Combine(dir, "settings.json"), """{ "Source": "RoomLight", "FollowRealLight": true, "Schema": 3 }""");
+        var s = new JsonFileStore(dir).Load("settings.json", () => new AppSettings());
+        Assert.Equal(SwitchAnimation.Roller, s.Animation);
+        Assert.Equal(TaskbarTheme.Follow, s.Taskbar);
+        Assert.Equal(new Profile("#0067c0", Pointer.White, Sounds.Normal), s.Day);
+        Assert.Equal(new Profile("#6b69d6", Pointer.Black, Sounds.Normal), s.Night);
+        Assert.True(s.ProfilesFollow);
+    }
 }

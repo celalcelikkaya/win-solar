@@ -1,4 +1,5 @@
 using WinSolar.Core.Decisions;
+using WinSolar.Core.Desktop;
 using WinSolar.Core.Power;
 using WinSolar.Core.Scheduling;
 
@@ -26,6 +27,16 @@ public sealed record AppSettings
     public bool FollowRealLight { get; init; } = true;
     public int MaxShiftMin { get; init; } = 60;
     public BatteryRule Battery { get; init; } = BatteryRule.DarkBelow20;
+
+    // Plan 3
+    public SwitchAnimation Animation { get; init; } = SwitchAnimation.Roller;
+    public TaskbarTheme Taskbar { get; init; } = TaskbarTheme.Follow;
+    public Profile Day { get; init; } = new("#0067c0", Pointer.White, Sounds.Normal);
+    public Profile Night { get; init; } = new("#6b69d6", Pointer.Black, Sounds.Normal);
+
+    /// <summary>"Pointer and sounds follow the profile"; off keeps the Day profile's pointer and sounds.</summary>
+    public bool ProfilesFollow { get; init; } = true;
+
     public int Schema { get; init; } = 3;
 
     /// <summary>How far real light may move a switch: 30, 60 or 90 minutes.</summary>
