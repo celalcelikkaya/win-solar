@@ -4,6 +4,22 @@
 
 ---
 
+## Win Solar 3 (native Windows app, branch `v3-wpf`)
+
+Win Solar 3 is a rewrite in C# .NET 8 + WPF: much lighter than the Electron version, no PowerShell, a flyout that
+slides in from the taskbar, a quiet heads-up card before each switch, Win + Shift + D, and an installer that removes
+Win Solar 2 for you.
+
+- Build and test: `dotnet test`, then `dotnet run --project src/WinSolar.App`
+- Installer: `pwsh build/release.ps1` → `dist/WinSolarSetup-3.0.0.exe` (needs Inno Setup 6)
+- Design: `docs/superpowers/specs/2026-11-26-win-solar-wpf-design.md`
+
+**First install:** the installer is not code-signed yet, so Windows SmartScreen may say "Windows protected your PC".
+Click **More info → Run anyway**. This appears only for the installer; the installed app runs normally. The installer
+needs no administrator rights.
+
+---
+
 ## ✨ Features
 - **Automatic Theme Switching:** Dynamically toggles Windows light/dark mode according to real-time solar calculations.
 - **Location-Based:** Computes exact sunrise and sunset times based on your local coordinates.
