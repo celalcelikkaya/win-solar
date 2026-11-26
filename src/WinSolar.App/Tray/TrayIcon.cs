@@ -2,17 +2,20 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Interop;
+using System.Windows.Threading;
 using WinSolar.App.Interop;
 using WinSolar.App.Services;
 using WinSolar.Core.Decisions;
 using WinSolar.Core.Engine;
 using WinSolar.Core.Presentation;
 using WinSolar.Core.Scheduling;
+using Drawing = System.Drawing;
 using Forms = System.Windows.Forms;
 
 namespace WinSolar.App.Tray;
 
-/// <summary>Tray icon: live sun/moon glyph, a tooltip that says what happens next, and the right-click menu.</summary>
+/// <summary>Tray icon: live sun/moon glyph, a tooltip that says what happens next, the right-click menu, and a soft
+/// "breathing" while a tucked heads-up is pending.</summary>
 public sealed class TrayIcon : IDisposable
 {
     private readonly EngineHost host;
@@ -20,7 +23,11 @@ public sealed class TrayIcon : IDisposable
     private readonly Action openSettings;
     private readonly Action quit;
     private readonly Forms.NotifyIcon icon;
+    private readonly DispatcherTimer breath;
+    private Drawing.Icon? normal;
+    private Drawing.Icon? dim;
     private (Theme, TrayBadge)? drawn;
+    private bool dimmed;
 
     public TrayIcon(EngineHost host, Action toggleFlyout, Action openSettings, Action quit)
     {
@@ -30,6 +37,12 @@ public sealed class TrayIcon : IDisposable
         this.quit = quit;
         icon = new Forms.NotifyIcon { Text = "Win Solar", Visible = true };
         icon.MouseUp += OnMouseUp;
+        breath = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(900) };
+        breath.Tick += (_, _) =>
+        {
+            dimmed = !dimmed;
+            icon.Icon = dimmed ? dim : normal;
+        };
         host.Changed += Update;
     }
 
@@ -41,14 +54,28 @@ public sealed class TrayIcon : IDisposable
             : TrayBadge.None;
         if (drawn != (s.Applied, badge))
         {
-            var old = icon.Icon;
-            icon.Icon = TrayGlyphs.Render(s.Applied, badge);
-            old?.Dispose();
+            var (oldNormal, oldDim) = (normal, dim);
+            normal = TrayGlyphs.Render(s.Applied, badge);
+            dim = TrayGlyphs.Render(s.Applied, badge, 0.4);
+            icon.Icon = dimmed ? dim : normal;
+            oldNormal?.Dispose();
+            oldDim?.Dispose();
             drawn = (s.Applied, badge);
         }
 
         var text = Tooltip(s, host.Store.Settings.Hour12);
         icon.Text = text.Length > 127 ? text[..127] : text;
+    }
+
+    public void SetBreathing(bool on)
+    {
+        if (on) breath.Start();
+        else
+        {
+            breath.Stop();
+            dimmed = false;
+            icon.Icon = normal;
+        }
     }
 
     /// <summary>Spec copy: "Win Solar · Dark" then what happens next.</summary>
@@ -77,24 +104,33 @@ public sealed class TrayIcon : IDisposable
         var s = host.Last;
         var engine = host.Engine;
         var menu = new ContextMenu { Placement = PlacementMode.MousePoint };
+        menu.SetResourceReference(FrameworkElement.StyleProperty, "TrayMenu");
 
         MenuItem Item(string header, Action action, bool isChecked = false)
         {
             var item = new MenuItem { Header = header, IsChecked = isChecked };
+            item.SetResourceReference(FrameworkElement.StyleProperty, "TrayMenuItem");
             item.Click += (_, _) => action();
             return item;
+        }
+
+        Separator Line()
+        {
+            var sep = new Separator();
+            sep.SetResourceReference(FrameworkElement.StyleProperty, "TrayMenuSeparator");
+            return sep;
         }
 
         var mode = s?.Mode ?? Mode.Auto;
         menu.Items.Add(Item("Auto (sunrise and sunset)", () => engine.SetMode(Mode.Auto), mode == Mode.Auto));
         menu.Items.Add(Item("Light", () => engine.SetMode(Mode.Light), mode == Mode.Light));
         menu.Items.Add(Item("Dark", () => engine.SetMode(Mode.Dark), mode == Mode.Dark));
-        menu.Items.Add(new Separator());
+        menu.Items.Add(Line());
         if (s?.Hold is { Kind: HoldKind.Pause } pause)
             menu.Items.Add(Item($"Resume switching (paused until {Format.Time(pause.Until, s.Place.TimeZoneId, host.Store.Settings.Hour12)})", engine.Resume));
         else
             menu.Items.Add(Item("Pause switching for 1 hour", () => engine.Pause(TimeSpan.FromHours(1))));
-        menu.Items.Add(new Separator());
+        menu.Items.Add(Line());
         menu.Items.Add(Item("Open Win Solar", toggleFlyout));
         menu.Items.Add(Item("Settings", openSettings));
         menu.Items.Add(Item("Quit", quit));
@@ -110,8 +146,10 @@ public sealed class TrayIcon : IDisposable
     public void Dispose()
     {
         host.Changed -= Update;
+        breath.Stop();
         icon.Visible = false;
-        icon.Icon?.Dispose();
         icon.Dispose();
+        normal?.Dispose();
+        dim?.Dispose();
     }
 }

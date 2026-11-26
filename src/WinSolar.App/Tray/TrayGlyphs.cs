@@ -1,5 +1,6 @@
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
 using WinSolar.App.Interop;
 using WinSolar.Core.Scheduling;
 
@@ -13,7 +14,7 @@ internal static class TrayGlyphs
     private static readonly Color Sun = Color.FromArgb(0xFF, 0xB9, 0x00);
     private static readonly Color Moon = Color.FromArgb(0xB9, 0xC6, 0xFF);
 
-    public static Icon Render(Theme theme, TrayBadge badge)
+    public static Icon Render(Theme theme, TrayBadge badge, double alpha = 1)
     {
         var size = (int)Math.Round(16 * Native.GetDpiForSystem() / 96.0);
         using var bmp = new Bitmap(size, size);
@@ -26,7 +27,8 @@ internal static class TrayGlyphs
             if (badge != TrayBadge.None) DrawBadge(g, s, badge);
         }
 
-        var handle = bmp.GetHicon();
+        using var final = alpha >= 1 ? (Bitmap)bmp.Clone() : Fade(bmp, alpha);
+        var handle = final.GetHicon();
         try
         {
             using var temp = Icon.FromHandle(handle);
@@ -36,6 +38,16 @@ internal static class TrayGlyphs
         {
             Native.DestroyIcon(handle);
         }
+    }
+
+    private static Bitmap Fade(Bitmap source, double alpha)
+    {
+        var faded = new Bitmap(source.Width, source.Height);
+        using var g = Graphics.FromImage(faded);
+        using var attributes = new ImageAttributes();
+        attributes.SetColorMatrix(new ColorMatrix { Matrix33 = (float)alpha });
+        g.DrawImage(source, new Rectangle(0, 0, source.Width, source.Height), 0, 0, source.Width, source.Height, GraphicsUnit.Pixel, attributes);
+        return faded;
     }
 
     private static void DrawSun(Graphics g, float s)

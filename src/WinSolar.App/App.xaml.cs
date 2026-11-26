@@ -1,50 +1,109 @@
 using System.Windows;
+using WinSolar.App.Flyout;
+using WinSolar.App.Notify;
 using WinSolar.App.Services;
+using WinSolar.App.SettingsUi;
+using WinSolar.App.Styling;
 using WinSolar.App.Tray;
-using WinSolar.Core.Decisions;
-using WinSolar.Core.Engine;
-using WinSolar.Core.Scheduling;
 
 namespace WinSolar.App;
 
 public partial class App : Application
 {
+    private const string MutexName = @"Local\WinSolar.SingleInstance";
+    private const string ShowEventName = @"Local\WinSolar.Show";
+
     private Mutex? singleInstance;
+    private EventWaitHandle? showSignal;
     private EngineHost? host;
     private TrayIcon? tray;
+    private FlyoutWindow? flyout;
+    private Hotkey? hotkey;
 
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
 
-        singleInstance = new Mutex(initiallyOwned: true, @"Local\WinSolar.SingleInstance", out var first);
+        singleInstance = new Mutex(initiallyOwned: true, MutexName, out var first);
         if (!first)
         {
+            // Already running: ask the running copy to open its window, then leave.
+            if (EventWaitHandle.TryOpenExisting(ShowEventName, out var other)) { other.Set(); other.Dispose(); }
             Shutdown();
             return;
         }
 
         var store = new AppStateStore();
-        host = new EngineHost(store, new SilentNotifier());
-        tray = new TrayIcon(host, toggleFlyout: () => { }, openSettings: () => { }, quit: Quit);
-        host.Start();
+        ThemeManager.Apply(new WindowsTheme().Read());
+
+        var notifier = new CardNotifier();
+        var engineHost = new EngineHost(store, notifier);
+        var window = new FlyoutWindow(engineHost);
+        var trayIcon = new TrayIcon(engineHost, window.Toggle, window.ShowSettings, Quit);
+        var keys = new Hotkey(() =>
+        {
+            var (theme, detail) = engineHost.Engine.Shortcut();
+            Osd.Flash(theme, detail);
+        });
+        (host, flyout, tray, hotkey) = (engineHost, window, trayIcon, keys);
+
+        notifier.Bind(engineHost, trayIcon, window);
+        window.IsVisibleChanged += (_, _) => notifier.Layout();
+        if (store.Settings.Shortcut) keys.Register();
+
+        window.Context = new SheetContext
+        {
+            Host = engineHost,
+            Flyout = window,
+            SetShortcut = on => on ? keys.Register() : UnregisterShortcut(),
+            ShortcutTaken = () => store.Settings.Shortcut && !keys.IsRegistered,
+            Quit = Quit,
+        };
+
+        // Every Win Solar surface follows the theme Windows is in.
+        engineHost.Changed += s => ThemeManager.Apply(s.Applied);
+
+        // First run of an installed copy: start with Windows as the settings say.
+        if (Autostart.IsInstalledCopy && store.Settings.StartWithWindows && !Autostart.IsOn()) Autostart.Set(true);
+
+        var signal = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName);
+        showSignal = signal;
+        var listener = new Thread(() =>
+        {
+            try
+            {
+                while (signal.WaitOne())
+                {
+                    if (Dispatcher.HasShutdownStarted) return;
+                    Dispatcher.InvokeAsync(window.ShowFlyout);
+                }
+            }
+            catch (ObjectDisposedException)
+            {
+                // app is closing
+            }
+        }) { IsBackground = true, Name = "WinSolar.ShowListener" };
+        listener.Start();
+
+        engineHost.Start();
+        if (!e.Args.Contains("--minimized", StringComparer.OrdinalIgnoreCase)) window.ShowFlyout();
+    }
+
+    private bool UnregisterShortcut()
+    {
+        hotkey?.Unregister();
+        return true;
     }
 
     private void Quit() => Shutdown();
 
     protected override void OnExit(ExitEventArgs e)
     {
+        hotkey?.Dispose();
         tray?.Dispose();
         host?.Dispose();
+        showSignal?.Dispose();
         singleInstance?.Dispose();
         base.OnExit(e);
-    }
-
-    /// <summary>Placeholder until the toast notifier (Plan 1, Task 12).</summary>
-    private sealed class SilentNotifier : INotifier
-    {
-        public void HeadsUp(Transition next, int minutesLeft) { }
-        public void DismissHeadsUp() { }
-        public void Switched(Theme theme, Cause cause, Transition? next) { }
     }
 }
