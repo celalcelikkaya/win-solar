@@ -12,6 +12,7 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
   (open in a browser; this is the visual reference for all UI work)
 - Plan 1 (done): `docs/superpowers/plans/2026-11-26-win-solar-v3-plan-1-foundation.md`
 - Plan 2 (done): `docs/superpowers/plans/2026-11-26-win-solar-v3-plan-2-real-light-battery-travel.md` (travel dropped)
+- Plan 3 (done): `docs/superpowers/plans/2026-11-27-win-solar-v3-plan-3-switch-and-profiles.md`
 - Core logic, no Windows APIs, fully unit-tested: `src/WinSolar.Core`
   - `Sun/SunCalculator.cs` offline NOAA sun times (port of v2 `src/lib/sun.ts`) + sun elevation
   - `Scheduling/ScheduleCalculator.cs` prev/next/after switch, phase, progress, in the **place's** time zone;
@@ -27,6 +28,9 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
 - WPF app: `src/WinSolar.App`
   - `Services/EngineHost.cs` one timer at the engine's next due moment + wake/unlock/time-change re-checks
   - `Services/WindowsServices.cs` theme via registry + `WM_SETTINGCHANGE`, full-screen probe
+  - `Services/DesktopProfile.cs` accent (uxtheme ordinals 120/122), pointer (Cursors + `SPI_SETCURSORS`), sounds
+    (AppEvents scheme; the user's own sounds saved in `saved-sounds.json` while Off); `WindowsTheme` applies apps +
+    taskbar theme + profile behind `Overlay/SwitchOverlay.cs` (Roller/Fade/Instant)
   - `Services/LightSensorService.cs` (WinRT LightSensor), `PowerService.cs` (PowerManager), `WeatherService.cs`
     (Open-Meteo, hourly, only without a sensor), `LearnedStore.cs`, `Log.cs`
   - `Flyout/FlyoutWindow.cs` the tray flyout (built in code), `Settings/SettingsSheet.cs` settings + location sheets
@@ -37,7 +41,7 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
 
 ## Commands (on Celal's laptop, repo at `D:\Projects\win-solar`)
 
-- Test: `dotnet test`  (128 tests, all passing)
+- Test: `dotnet test`  (138 tests, all passing)
 - Run: `dotnet run --project src\WinSolar.App` (quit the installed copy first; single instance)
 - Installer: `pwsh build\release.ps1` → `dist\WinSolarSetup-3.0.0.exe` (+ `SHA256SUMS.txt`)
 - C: has little free space: `NUGET_PACKAGES` points to `D:\.nuget\packages`; keep build output on D:.
@@ -84,11 +88,12 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
    The Win Solar mark is in About and the tray menu title row; the exe's FileDescription is "Win Solar".
 3. **Dynamic wallpaper is not there yet**: expected, it is Plan 4.
 
+- Plan 3 (branch `feat/plan-3-switch-and-profiles`): Roller/Fade/Instant switch overlay, Day/Night profiles (accent,
+  pointer, sounds), taskbar theme Follow/Always dark/Always light, Room light as its own "Switch by" choice (merged
+  before Plan 3). Checked live by Celal: Roller from the shortcut and the flyout.
+
 ## Next (one plan each, written with `superpowers:writing-plans`, executed with `superpowers:executing-plans`)
 
-- Plan 3: Roller / Fade / Instant switch overlay (screen capture shown topmost, theme applied underneath, soft-edged
-  wipe top→bottom ~1.6 s), Day/Night profiles (accent if reliable, pointer White/Black, sounds Normal/Off),
-  taskbar theme Follow / Always dark / Always light.
 - Plan 4: dynamic wallpaper import from macOS `.heic` (original resolution, Display P3 → sRGB, lossless PNG frames,
   solar/h24/apr metadata), save + restore the user's own wallpaper, welcome screen with every feature on.
 - Plan 5: in-app updates from GitHub Releases, Defender false-positive submission + checksums in the release
@@ -121,3 +126,10 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
   hold or manual mode it is kept until the user changes the mode or the hold.
 - No travel detection (Celal, 2026-11-26): the place is changed by hand in Settings.
 - Flyout hero has no phase chip ("Night", "Daytime") and the light reading has no pill (Celal, 2026-11-27).
+- Accent color works only through uxtheme `SetUserColorPreference` (ordinal 122); writing the Accent/DWM registry
+  values alone changed nothing on Celal's laptop (2026-11-27). If the call is missing, accent rows hide.
+- Switch overlay: frozen picture per monitor (topmost, click-through, excluded from capture), theme applied below,
+  then it waits until the screen has really repainted (3 equal looks, 0.6–3 s; Electron apps repaint late), rolls
+  1.6 s, and fades 0.3 s to any app that repainted even later. A fixed 450 ms wait missed slow apps (Celal saw no roll).
+- Night profile sounds default Normal (the demo's "Quiet" does not exist; Off is opt-in). The profile is re-applied at
+  start and on every settings change (only what differs is written).

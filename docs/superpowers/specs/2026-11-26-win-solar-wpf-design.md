@@ -301,7 +301,11 @@ library choices (e.g. tray icon), test design, task order.
 ## Calls made by Claude (check these)
 
 - Sounds per profile: Normal / Off only ("Quiet" from the demo has no clean Windows equivalent).
-- Accent color: kept only if the undocumented registry approach proves reliable on Celal's laptop.
+- Accent color: kept. The registry approach did nothing on Celal's laptop; uxtheme `SetUserColorPreference`
+  (undocumented, ordinal 122) works and is used; accent rows hide if it is missing.
+- Night profile sounds default Normal (Off is a choice, not a default).
+- The switch waits until Windows has repainted (up to 3 s) before rolling, so the screen looks frozen a bit longer
+  than 1.6 s.
 - Light-sensor defaults 60 / 150 lx with self-calibration; changes must last 2 minutes; real light may move a switch
   by at most 1 hour by default.
 - v2 settings are not migrated; the v3 installer removes v2 (asks first).
