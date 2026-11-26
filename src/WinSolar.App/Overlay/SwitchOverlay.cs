@@ -18,13 +18,16 @@ namespace WinSolar.App.Overlay;
 /// </summary>
 public sealed class SwitchOverlay
 {
-    private static readonly TimeSpan Repaint = TimeSpan.FromMilliseconds(450);
+    private static readonly TimeSpan Look = TimeSpan.FromMilliseconds(100);
+    private static readonly TimeSpan GiveUp = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan RollTime = TimeSpan.FromSeconds(1.6);
     private static readonly TimeSpan FadeTime = TimeSpan.FromSeconds(1.3);
     private static readonly TimeSpan Watchdog = TimeSpan.FromSeconds(5);
     private const double Band = 0.12;
 
     private readonly List<(Window Window, Native.Rect Bounds, Image New, Image Old)> screens = [];
+    private uint[]? oldSample, lastSample;
+    private DateTime appliedAt;
     private DispatcherTimer? step;
     private DispatcherTimer? watchdog;
     private int frames;
@@ -63,7 +66,9 @@ public sealed class SwitchOverlay
         }
 
         watchdog = new DispatcherTimer(Watchdog, DispatcherPriority.Normal, (_, _) => Close(), Dispatcher.CurrentDispatcher);
-        step = new DispatcherTimer(Repaint, DispatcherPriority.Normal, (_, _) => Reveal(animation), Dispatcher.CurrentDispatcher);
+        appliedAt = DateTime.UtcNow;
+        lastSample = null;
+        step = new DispatcherTimer(Look, DispatcherPriority.Normal, (_, _) => WaitForRepaint(animation), Dispatcher.CurrentDispatcher);
     }
 
     /// <summary>Shows the current picture of every monitor and waits until it is really on screen.</summary>
@@ -71,7 +76,9 @@ public sealed class SwitchOverlay
     {
         foreach (var bounds in Native.Monitors())
         {
-            var oldImage = new Image { Source = Capture(bounds), Stretch = Stretch.Fill };
+            var picture = Capture(bounds);
+            oldSample ??= Sample(picture);
+            var oldImage = new Image { Source = picture, Stretch = Stretch.Fill };
             var newImage = new Image { Stretch = Stretch.Fill };
             var window = new Window
             {
@@ -99,13 +106,21 @@ public sealed class SwitchOverlay
         Native.DwmFlush();
     }
 
-    private void Reveal(SwitchAnimation animation)
+    /// <summary>
+    /// Windows repaints at its own pace after a theme change. Look every 100 ms (the overlay is excluded from capture)
+    /// and start once the screen differs from the frozen picture and has stopped changing, or after 2 s.
+    /// </summary>
+    private void WaitForRepaint(SwitchAnimation animation)
     {
-        step?.Stop();
-        step = null;
         try
         {
-            foreach (var s in screens) s.New.Source = Capture(s.Bounds);
+            var captures = screens.Select(s => Capture(s.Bounds)).ToList();
+            var sample = Sample(captures[0]);
+            var changed = Differs(oldSample!, sample, 0.02);
+            var settled = changed && lastSample is not null && !Differs(lastSample, sample, 0.002);
+            lastSample = sample;
+            if (!settled && DateTime.UtcNow - appliedAt < GiveUp) return;
+            for (var i = 0; i < screens.Count; i++) screens[i].New.Source = captures[i];
         }
         catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.ExternalException)
         {
@@ -113,6 +128,32 @@ public sealed class SwitchOverlay
             Close();
             return;
         }
+
+        step?.Stop();
+        step = null;
+        Log.Write($"Switch animation: screen repainted after {(DateTime.UtcNow - appliedAt).TotalMilliseconds:0} ms");
+        Reveal(animation);
+    }
+
+    /// <summary>A 64 x 40 grid of pixels, enough to tell a theme change from a blinking caret.</summary>
+    private static uint[] Sample(BitmapSource image)
+    {
+        var w = image.PixelWidth;
+        var h = image.PixelHeight;
+        var pixels = new uint[w * h];
+        image.CopyPixels(pixels, w * 4, 0);
+        var sample = new uint[64 * 40];
+        for (var y = 0; y < 40; y++)
+            for (var x = 0; x < 64; x++)
+                sample[y * 64 + x] = pixels[(y * h / 40 + h / 80) * w + x * w / 64 + w / 128] & 0xFFFFFF;
+        return sample;
+    }
+
+    private static bool Differs(uint[] a, uint[] b, double share) =>
+        a.Zip(b).Count(p => p.First != p.Second) > share * a.Length;
+
+    private void Reveal(SwitchAnimation animation)
+    {
 
         var time = animation == SwitchAnimation.Fade ? FadeTime : RollTime;
         var ease = new CubicEase { EasingMode = EasingMode.EaseInOut };
@@ -160,6 +201,7 @@ public sealed class SwitchOverlay
 
         foreach (var s in screens) s.Window.Close();
         screens.Clear();
+        oldSample = lastSample = null;
     }
 
     private static BitmapSource Capture(Native.Rect bounds)
