@@ -47,10 +47,9 @@ public partial class App : Application
         }
 
         var store = new AppStateStore();
-        ThemeManager.Apply(new WindowsTheme().Read());
-
         var notifier = new CardNotifier();
         var engineHost = new EngineHost(store, notifier);
+        ThemeManager.Apply(engineHost.Theme.Read());
         var window = new FlyoutWindow(engineHost);
         var trayIcon = new TrayIcon(engineHost, window.Toggle, window.ShowSettings, Quit);
         var keys = new Hotkey(() =>

@@ -1,6 +1,9 @@
 using Microsoft.Win32;
 using WinSolar.App.Interop;
+using WinSolar.App.Overlay;
+using WinSolar.Core.Desktop;
 using WinSolar.Core.Engine;
+using WinSolar.Core.Settings;
 using WinSolar.Core.Scheduling;
 
 namespace WinSolar.App.Services;
@@ -10,11 +13,13 @@ public sealed class SystemClock : IClock
     public DateTimeOffset Now => DateTimeOffset.Now;
 }
 
-/// <summary>Apps and system theme through the Personalize registry key, then one broadcast. Writes only what changed.</summary>
-public sealed class WindowsTheme : IThemeApplier
+/// <summary>
+/// Apps theme, taskbar theme (by its rule) and the profile (accent, pointer, sounds), then one broadcast; the switch
+/// itself runs behind <see cref="SwitchOverlay"/>. Writes only what changed. Outside changes are read from the apps theme.
+/// </summary>
+public sealed class WindowsTheme(Func<AppSettings> settings, DesktopProfile profile, SwitchOverlay overlay) : IThemeApplier
 {
     private const string KeyPath = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
-    private static readonly string[] Values = ["AppsUseLightTheme", "SystemUsesLightTheme"];
 
     public Theme Read()
     {
@@ -22,22 +27,33 @@ public sealed class WindowsTheme : IThemeApplier
         return key?.GetValue("AppsUseLightTheme") is int v && v == 0 ? Theme.Dark : Theme.Light;
     }
 
-    public void Apply(Theme theme)
+    public void Apply(Theme theme) => overlay.Run(settings().Animation, () => Write(theme));
+
+    /// <summary>Settings changed: bring the taskbar and profile in line with the current theme, without animation.</summary>
+    public void Refresh() => Write(Read());
+
+    private void Write(Theme theme)
     {
-        var value = theme == Theme.Light ? 1 : 0;
+        var look = DesktopLook.For(theme, settings());
         var changed = false;
         using (var key = Registry.CurrentUser.CreateSubKey(KeyPath))
         {
-            foreach (var name in Values)
-            {
-                if (key.GetValue(name) is int current && current == value) continue;
-                key.SetValue(name, value, RegistryValueKind.DWord);
-                changed = true;
-            }
+            changed |= SetFlag(key, "AppsUseLightTheme", look.Apps == Theme.Light);
+            changed |= SetFlag(key, "SystemUsesLightTheme", look.Taskbar == Theme.Light);
         }
+
+        changed |= profile.Apply(look);
 
         // The broadcast can wait on slow windows; never block the UI thread for it.
         if (changed) _ = Task.Run(() => Native.BroadcastSettingChange("ImmersiveColorSet"));
+    }
+
+    private static bool SetFlag(RegistryKey key, string name, bool on)
+    {
+        var value = on ? 1 : 0;
+        if (key.GetValue(name) is int current && current == value) return false;
+        key.SetValue(name, value, RegistryValueKind.DWord);
+        return true;
     }
 }
 

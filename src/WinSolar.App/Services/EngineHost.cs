@@ -25,7 +25,9 @@ public sealed class EngineHost : IDisposable
         SolarEngine? engine = null; // the sensor may read before the engine exists
         Light = new LightSensorService(dispatcher, Learned, () => store.Settings.Place ?? engine?.FallbackPlace ?? firstGuess);
         Weather = new WeatherService(dispatcher);
-        Engine = engine = new SolarEngine(new SystemClock(), new WindowsTheme(), notifier, new FullScreenProbe(), store, firstGuess,
+        Desktop = new DesktopProfile(store.Folder);
+        Theme = new WindowsTheme(() => store.Settings, Desktop, new Overlay.SwitchOverlay());
+        Engine = engine = new SolarEngine(new SystemClock(), Theme, notifier, new FullScreenProbe(), store, firstGuess,
             Power, Light, Weather);
         Engine.Changed += OnChanged;
         Power.Changed += Tick;
@@ -54,6 +56,10 @@ public sealed class EngineHost : IDisposable
 
     public WeatherService Weather { get; }
 
+    public DesktopProfile Desktop { get; }
+
+    public WindowsTheme Theme { get; }
+
     public EngineSnapshot? Last { get; private set; }
 
     public event Action<EngineSnapshot>? Changed;
@@ -64,6 +70,20 @@ public sealed class EngineHost : IDisposable
     {
         started = true;
         Engine.Start();
+        RefreshLook(); // a profile setting may not match yet (first run, or changed while Win Solar was closed)
+    }
+
+    /// <summary>Brings the taskbar, accent, pointer and sounds in line with the current theme (no animation).</summary>
+    public void RefreshLook()
+    {
+        try
+        {
+            Theme.Refresh();
+        }
+        catch (Exception e) when (e is System.IO.IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            Log.Write($"Could not update the desktop look: {e.Message}");
+        }
     }
 
     /// <summary>Re-evaluates now (ignored until <see cref="Start"/>, so early sensor or power events change nothing).</summary>

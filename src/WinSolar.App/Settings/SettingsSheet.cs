@@ -31,6 +31,7 @@ public sealed class SheetContext
     public void Change(Func<AppSettings, AppSettings> change, bool rebuild = true)
     {
         Host.Store.UpdateSettings(change);
+        Host.RefreshLook();
         Host.Tick();
         if (rebuild) Flyout.RebuildSheet(body => SettingsSheet.Build(body, this));
     }
