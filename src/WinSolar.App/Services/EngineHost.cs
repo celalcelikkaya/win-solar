@@ -19,9 +19,18 @@ public sealed class EngineHost : IDisposable
     {
         Store = store;
         dispatcher = Dispatcher.CurrentDispatcher;
-        Engine = new SolarEngine(new SystemClock(), new WindowsTheme(), notifier, new FullScreenProbe(), store, GuessPlace(),
-            new NoPower(), new NoRoomLight(), new NoWeather());
+        Learned = new LearnedStore(store.Folder);
+        Power = new PowerService(dispatcher);
+        var firstGuess = GuessPlace();
+        SolarEngine? engine = null; // the sensor may read before the engine exists
+        Light = new LightSensorService(dispatcher, Learned, () => store.Settings.Place ?? engine?.FallbackPlace ?? firstGuess);
+        Weather = new WeatherService(dispatcher);
+        Engine = engine = new SolarEngine(new SystemClock(), new WindowsTheme(), notifier, new FullScreenProbe(), store, firstGuess,
+            Power, Light, Weather);
         Engine.Changed += OnChanged;
+        Power.Changed += Tick;
+        Light.Changed += Tick;
+        Weather.Changed += Tick;
 
         timer = new DispatcherTimer(DispatcherPriority.Normal, dispatcher);
         timer.Tick += (_, _) => Tick();
@@ -37,13 +46,31 @@ public sealed class EngineHost : IDisposable
 
     public SolarEngine Engine { get; }
 
+    public LearnedStore Learned { get; }
+
+    public PowerService Power { get; }
+
+    public LightSensorService Light { get; }
+
+    public WeatherService Weather { get; }
+
     public EngineSnapshot? Last { get; private set; }
 
     public event Action<EngineSnapshot>? Changed;
 
-    public void Start() => Engine.Start();
+    private bool started;
 
-    public void Tick() => Engine.Tick();
+    public void Start()
+    {
+        started = true;
+        Engine.Start();
+    }
+
+    /// <summary>Re-evaluates now (ignored until <see cref="Start"/>, so early sensor or power events change nothing).</summary>
+    public void Tick()
+    {
+        if (started) Engine.Tick();
+    }
 
     private void OnChanged(EngineSnapshot snapshot)
     {
@@ -54,6 +81,7 @@ public sealed class EngineHost : IDisposable
         timer.Interval = wait < TimeSpan.FromSeconds(1) ? TimeSpan.FromSeconds(1) : wait;
         timer.Start();
         fullScreenPoll.IsEnabled = snapshot.WaitingForFullScreen;
+        Weather.Use(snapshot.Light.Source is LightSource.Weather or LightSource.WeatherUnavailable, snapshot.Place);
         Changed?.Invoke(snapshot);
     }
 
@@ -95,24 +123,8 @@ public sealed class EngineHost : IDisposable
         SystemEvents.TimeChanged -= OnTimeChanged;
         timer.Stop();
         fullScreenPoll.Stop();
+        Power.Dispose();
+        Light.Dispose();
+        Weather.Dispose();
     }
-}
-
-// Placeholders until the Windows services land (Plan 2, Task 6).
-internal sealed class NoPower : IPower
-{
-    public WinSolar.Core.Power.PowerStatus Read() => WinSolar.Core.Power.PowerStatus.Mains;
-}
-
-internal sealed class NoRoomLight : IRoomLight
-{
-    public bool Available => false;
-    public double? Lux => null;
-    public (WinSolar.Core.Scheduling.Theme Theme, DateTimeOffset At)? Pending => null;
-    public WinSolar.Core.Scheduling.Theme? Current(DateTimeOffset now) => null;
-}
-
-internal sealed class NoWeather : IWeather
-{
-    public WinSolar.Core.Light.HourWeather? At(DateTimeOffset t) => null;
 }
