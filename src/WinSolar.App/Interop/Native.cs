@@ -93,6 +93,53 @@ internal static partial class Native
         SetWindowLongPtr(hwnd, GwlExStyle, new IntPtr(style | WsExNoActivate | WsExToolWindow));
     }
 
+    // --- flyout frame and motion (DWM rounds, borders and shadows it; the window itself slides and fades) ---
+    private const int DwmwaWindowCornerPreference = 33;
+    private const int DwmwaBorderColor = 34;
+    private const int DwmwcpRound = 2;
+    private const long WsExLayered = 0x00080000;
+    private const uint LwaAlpha = 0x2;
+    private const uint SwpNoSize = 0x0001, SwpNoZOrder = 0x0004, SwpNoActivate = 0x0010;
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetLayeredWindowAttributes(IntPtr hwnd, uint colorKey, byte alpha, uint flags);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetWindowPos(IntPtr hwnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
+
+    /// <summary>Windows 11 rounded corners (ignored on Windows 10, which keeps square corners).</summary>
+    public static void RoundCorners(IntPtr hwnd)
+    {
+        var round = DwmwcpRound;
+        DwmSetWindowAttribute(hwnd, DwmwaWindowCornerPreference, ref round, sizeof(int));
+    }
+
+    /// <summary>Colour of the thin border DWM draws around a rounded window.</summary>
+    public static void SetBorderColor(IntPtr hwnd, System.Windows.Media.Color color)
+    {
+        var colorRef = color.R | (color.G << 8) | (color.B << 16);
+        DwmSetWindowAttribute(hwnd, DwmwaBorderColor, ref colorRef, sizeof(int));
+    }
+
+    /// <summary>Lets the whole window fade with one constant alpha that DWM applies (no per-pixel copy).</summary>
+    public static void MakeLayered(IntPtr hwnd)
+    {
+        var style = GetWindowLongPtr(hwnd, GwlExStyle).ToInt64();
+        SetWindowLongPtr(hwnd, GwlExStyle, new IntPtr(style | WsExLayered));
+    }
+
+    public static void SetAlpha(IntPtr hwnd, double opacity) =>
+        SetLayeredWindowAttributes(hwnd, 0, (byte)Math.Round(Math.Clamp(opacity, 0, 1) * 255), LwaAlpha);
+
+    /// <summary>Moves a window in device pixels without resizing, activating or restacking it.</summary>
+    public static void MoveWindow(IntPtr hwnd, int x, int y) =>
+        SetWindowPos(hwnd, IntPtr.Zero, x, y, 0, 0, SwpNoSize | SwpNoZOrder | SwpNoActivate);
+
     // --- taskbar position ---
     public const uint AbmGetTaskbarPos = 5;
 

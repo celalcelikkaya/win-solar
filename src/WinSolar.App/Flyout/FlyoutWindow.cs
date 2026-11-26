@@ -3,9 +3,10 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
-using System.Windows.Media.Effects;
+using System.Windows.Interop;
 using System.Windows.Shapes;
 using System.Windows.Threading;
+using WinSolar.App.Interop;
 using WinSolar.App.Services;
 using WinSolar.App.SettingsUi;
 using WinSolar.App.Styling;
@@ -25,13 +26,11 @@ namespace WinSolar.App.Flyout;
 public sealed class FlyoutWindow : Window
 {
     private const double ContentWidth = 360;
-    private const double Shadow = 16;
     private const double ArcRadius = 92;
     private static readonly double ArcLength = Math.PI * ArcRadius;
     private static readonly Brush White = Frozen(Colors.White);
 
     private readonly EngineHost host;
-    private readonly TranslateTransform slide = new();
     private readonly Grid root;
     private readonly ScrollViewer mainScroll;
     private readonly DispatcherTimer minuteTimer;
@@ -88,14 +87,16 @@ public sealed class FlyoutWindow : Window
     public FlyoutWindow(EngineHost host)
     {
         this.host = host;
+        // An opaque window that DWM rounds, borders and shadows: a per-pixel transparent window with a WPF drop
+        // shadow had to be re-rendered and copied back from the GPU on every frame of the slide (~28 fps measured).
         WindowStyle = WindowStyle.None;
-        AllowsTransparency = true;
-        Background = Brushes.Transparent;
+        AllowsTransparency = false;
+        SetResourceReference(BackgroundProperty, "Bg");
         ShowInTaskbar = false;
         Topmost = true;
         ResizeMode = ResizeMode.NoResize;
         SizeToContent = SizeToContent.Height;
-        Width = ContentWidth + 2 * Shadow;
+        Width = ContentWidth;
         FontSize = 13;
         UseLayoutRounding = true;
         Title = "Win Solar";
@@ -240,7 +241,7 @@ public sealed class FlyoutWindow : Window
         content.Children.Add(mainScroll);
 
         // ----- sheet -----
-        sheetBackdrop = new Border { CornerRadius = new CornerRadius(12) };
+        sheetBackdrop = new Border();
         sheetBackdrop.SetResourceReference(Border.BackgroundProperty, "Backdrop");
         sheetBackdrop.MouseLeftButtonDown += (_, _) => CloseSheet();
         sheetTitle = new TextBlock { FontSize = 16, FontWeight = FontWeights.Bold, VerticalAlignment = VerticalAlignment.Center };
@@ -258,7 +259,7 @@ public sealed class FlyoutWindow : Window
         sheetContent.Children.Add(sheetScroll);
         sheet = new Border
         {
-            CornerRadius = new CornerRadius(12, 12, 11, 11),
+            CornerRadius = new CornerRadius(12, 12, 0, 0),
             VerticalAlignment = VerticalAlignment.Bottom,
             Child = sheetContent,
             RenderTransform = sheetSlide,
@@ -267,23 +268,18 @@ public sealed class FlyoutWindow : Window
         sheetLayer.Children.Add(sheetBackdrop);
         sheetLayer.Children.Add(sheet);
 
-        // ----- frame -----
-        var surfaceGrid = new Grid();
-        surfaceGrid.Children.Add(content);
-        surfaceGrid.Children.Add(sheetLayer);
-        var surface = new Border { CornerRadius = new CornerRadius(12), BorderThickness = new Thickness(1), Child = surfaceGrid };
-        surface.SetResourceReference(Border.BackgroundProperty, "Bg");
-        surface.SetResourceReference(Border.BorderBrushProperty, "Line");
-        var shadow = new Border
-        {
-            CornerRadius = new CornerRadius(12),
-            Effect = new DropShadowEffect { BlurRadius = 28, ShadowDepth = 8, Direction = 270, Opacity = 0.32, Color = Colors.Black },
-        };
-        shadow.SetResourceReference(Border.BackgroundProperty, "Bg");
-        root = new Grid { Margin = new Thickness(Shadow), RenderTransform = slide };
-        root.Children.Add(shadow);
-        root.Children.Add(surface);
+        // ----- frame (corners, border and shadow come from DWM) -----
+        root = new Grid();
+        root.Children.Add(content);
+        root.Children.Add(sheetLayer);
         Content = root;
+        SourceInitialized += (_, _) =>
+        {
+            hwnd = new WindowInteropHelper(this).Handle;
+            Native.RoundCorners(hwnd);
+            Native.MakeLayered(hwnd);
+            Native.SetAlpha(hwnd, 0);
+        };
 
         minuteTimer = new DispatcherTimer(TimeSpan.FromSeconds(20), DispatcherPriority.Background, (_, _) => Refresh(), Dispatcher);
         minuteTimer.Stop();
@@ -318,27 +314,33 @@ public sealed class FlyoutWindow : Window
     public void ShowFlyout()
     {
         if (IsVisible && !hiding) { Activate(); return; }
+        var wasVisible = IsVisible; // re-opened while the hide motion was still running
         hiding = false;
         Refresh();
-        shownProgress = 0; // the sun sweeps along the arc on every open
+        shownProgress = 0; // the sun sweeps along the arc on every open (after the slide, see Animate)
+        DrawBody();
         var (e, wa) = TaskbarEdge.Get();
         edge = e;
-        mainScroll.MaxHeight = Math.Max(200, wa.Height - 2 * 12 - 60);
-        root.Opacity = 0;
-        Show();
-        UpdateLayout();
-        Left = edge == Edge.Left ? wa.Left - 4 : wa.Right - ActualWidth + 4;
-        Top = edge == Edge.Top ? wa.Top - 4 : wa.Bottom - ActualHeight + 4;
-        Activate();
+        mainScroll.MaxHeight = Math.Max(200, wa.Height - 2 * Gap - 60);
+        if (!wasVisible)
+        {
+            if (hwnd != IntPtr.Zero) Native.SetAlpha(hwnd, 0);
+            Show();
+        }
 
-        var from = 28.0;
-        slide.X = edge switch { Edge.Left => -from, Edge.Right => from, _ => 0 };
-        slide.Y = edge switch { Edge.Top => -from, Edge.Bottom => from, _ => 0 };
-        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
-        slide.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(300)) { EasingFunction = ease });
-        slide.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(300)) { EasingFunction = ease });
-        root.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(200)) { EasingFunction = ease });
+        UpdateLayout(); // lay out once before the first frame, not during the motion
+        anchor = new Point(
+            edge == Edge.Left ? wa.Left + Gap : wa.Right - ActualWidth - Gap,
+            edge == Edge.Top ? wa.Top + Gap : wa.Bottom - ActualHeight - Gap);
+        if (TryFindResource("Line") is SolidColorBrush line && TryFindResource("Bg") is SolidColorBrush bg)
+        {
+            // DWM ignores alpha: blend the translucent line colour over the background ourselves.
+            byte Mix(byte over, byte under) => (byte)Math.Round(under + (over - under) * line.Color.A / 255.0);
+            Native.SetBorderColor(hwnd, Color.FromRgb(Mix(line.Color.R, bg.Color.R), Mix(line.Color.G, bg.Color.G), Mix(line.Color.B, bg.Color.B)));
+        }
+        Activate();
         PlaceThumb(animate: false);
+        StartMotion(showing: true);
     }
 
     public void HideFlyout()
@@ -346,19 +348,62 @@ public sealed class FlyoutWindow : Window
         if (!IsVisible || hiding) return;
         hiding = true;
         lastHidden = DateTime.UtcNow;
-        var ease = new CubicEase { EasingMode = EasingMode.EaseIn };
-        var dist = 28.0;
-        var anim = new DoubleAnimation(0, TimeSpan.FromMilliseconds(150)) { EasingFunction = ease };
-        anim.Completed += (_, _) =>
+        StartMotion(showing: false);
+    }
+
+    // ---------------- motion: the window itself slides and fades; nothing inside is re-rendered ----------------
+
+    private const double Gap = 12;
+    private const double SlideDistance = 28;
+    private const double ShowMs = 300, FadeInMs = 200, HideMs = 150;
+    private readonly System.Diagnostics.Stopwatch motionClock = new();
+    private IntPtr hwnd;
+    private Point anchor;
+    private bool moving;
+    private bool motionShows;
+
+    private void StartMotion(bool showing)
+    {
+        motionShows = showing;
+        motionClock.Restart();
+        if (!moving) { moving = true; CompositionTarget.Rendering += StepMotion; }
+        StepMotion(null, EventArgs.Empty);
+    }
+
+    private void StepMotion(object? sender, EventArgs e)
+    {
+        var ms = motionClock.Elapsed.TotalMilliseconds;
+        double offset, alpha;
+        bool done;
+        if (motionShows)
         {
-            if (!hiding) return;
-            hiding = false;
-            Hide();
-            CloseSheet(animate: false);
-        };
-        slide.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(edge == Edge.Left ? -dist : edge == Edge.Right ? dist : 0, TimeSpan.FromMilliseconds(150)) { EasingFunction = ease });
-        slide.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(edge == Edge.Top ? -dist : edge == Edge.Bottom ? dist : 0, TimeSpan.FromMilliseconds(150)) { EasingFunction = ease });
-        root.BeginAnimation(OpacityProperty, anim);
+            var t = Math.Min(1, ms / ShowMs);
+            offset = Math.Pow(1 - t, 3); // cubic ease-out
+            alpha = 1 - Math.Pow(1 - Math.Min(1, ms / FadeInMs), 3);
+            done = t >= 1;
+        }
+        else
+        {
+            var t = Math.Min(1, ms / HideMs);
+            offset = t * t * t; // cubic ease-in
+            alpha = 1 - offset;
+            done = t >= 1;
+        }
+
+        var (dx, dy) = edge switch { Edge.Left => (-1, 0), Edge.Right => (1, 0), Edge.Top => (0, -1), _ => (0, 1) };
+        var scale = VisualTreeHelper.GetDpi(this);
+        Native.MoveWindow(hwnd,
+            (int)Math.Round((anchor.X + dx * SlideDistance * offset) * scale.DpiScaleX),
+            (int)Math.Round((anchor.Y + dy * SlideDistance * offset) * scale.DpiScaleY));
+        Native.SetAlpha(hwnd, alpha);
+        if (!done) return;
+
+        moving = false;
+        CompositionTarget.Rendering -= StepMotion;
+        if (motionShows || !hiding) return;
+        hiding = false;
+        Hide();
+        CloseSheet(animate: false);
     }
 
     public void ShowSettings()
@@ -640,7 +685,9 @@ public sealed class FlyoutWindow : Window
             if (!IsVisible) return;
             var (_, wa) = TaskbarEdge.Get();
             UpdateLayout();
-            if (edge != Edge.Top) Top = wa.Bottom - ActualHeight + 4;
+            if (edge == Edge.Top || moving) return;
+            anchor = new Point(anchor.X, wa.Bottom - ActualHeight - Gap);
+            Top = anchor.Y;
         }, DispatcherPriority.Loaded);
     }
 
@@ -815,8 +862,14 @@ public sealed class FlyoutWindow : Window
     /// <summary>Eases the sun/moon along the arc (and sweeps it on open), like the demo.</summary>
     private void Animate(object? sender, EventArgs e)
     {
+        if (moving) return; // the sweep starts once the window has arrived, so the slide never waits on a redraw
         if (Math.Abs(targetProgress - shownProgress) < 0.0005 && progressArc.StrokeDashArray.Count > 0) return;
         shownProgress += (targetProgress - shownProgress) * 0.07;
+        DrawBody();
+    }
+
+    private void DrawBody()
+    {
         var angle = Math.PI * (1 - shownProgress);
         bodyPos.X = 160 + ArcRadius * Math.Cos(angle);
         bodyPos.Y = 106 - ArcRadius * Math.Sin(angle);
