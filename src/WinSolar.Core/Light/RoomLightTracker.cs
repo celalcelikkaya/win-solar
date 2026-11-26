@@ -11,7 +11,7 @@ public sealed record Thresholds(double DarkBelow, double LightAbove);
 /// </summary>
 public sealed class RoomLightTracker(Thresholds thresholds)
 {
-    public static readonly TimeSpan Stability = TimeSpan.FromMinutes(2);
+    public static readonly TimeSpan Stability = TimeSpan.FromMinutes(1);
 
     private Theme? stable;
     private (Theme Theme, DateTimeOffset Since)? candidate;

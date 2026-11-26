@@ -35,6 +35,8 @@ public sealed class FlyoutWindow : Window
     private readonly Grid root;
     private readonly ScrollViewer mainScroll;
     private readonly DispatcherTimer minuteTimer;
+    private readonly DispatcherTimer secondTimer;
+    private (TextBlock Text, Core.Scheduling.Theme Theme, DateTimeOffset At)? roomCountdown;
 
     // header
     private readonly TextBlock placeName;
@@ -285,14 +287,16 @@ public sealed class FlyoutWindow : Window
 
         minuteTimer = new DispatcherTimer(TimeSpan.FromSeconds(20), DispatcherPriority.Background, (_, _) => Refresh(), Dispatcher);
         minuteTimer.Stop();
+        secondTimer = new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Background, (_, _) => TickCountdown(), Dispatcher);
+        secondTimer.Stop();
 
         host.Changed += Render;
         Deactivated += (_, _) => { if (!Pinned) HideFlyout(); };
         PreviewKeyDown += OnKey;
         IsVisibleChanged += (_, _) =>
         {
-            if (IsVisible) { CompositionTarget.Rendering += Animate; minuteTimer.Start(); StartStars(); }
-            else { CompositionTarget.Rendering -= Animate; minuteTimer.Stop(); StopStars(); }
+            if (IsVisible) { CompositionTarget.Rendering += Animate; minuteTimer.Start(); secondTimer.Start(); StartStars(); }
+            else { CompositionTarget.Rendering -= Animate; minuteTimer.Stop(); secondTimer.Stop(); StopStars(); }
         };
     }
 
@@ -587,8 +591,13 @@ public sealed class FlyoutWindow : Window
         }
         else if (s.Mode == Mode.Auto && s.Hold is null && s.Light is { Source: LightSource.Sensor, Pending: { } pending } && pending.Theme != s.Applied)
         {
-            key = $"room{pending.Theme}";
-            build = () => Banner("AccentSoft", "AccentLine", Icons.Bulb, $"The room is getting {(pending.Theme == Core.Scheduling.Theme.Dark ? "darker" : "brighter")}. Checking that it lasts…");
+            key = $"room{pending.Theme}{pending.At}";
+            build = () =>
+            {
+                var banner = Banner("AccentSoft", "AccentLine", Icons.Bulb, RoomText(pending.Theme, pending.At, now));
+                roomCountdown = ((TextBlock)banner.Tag, pending.Theme, pending.At);
+                return banner;
+            };
         }
         else if (s.HeadsUp is { } hu)
         {
@@ -615,6 +624,7 @@ public sealed class FlyoutWindow : Window
 
         if (key == bannerKey) return;
         bannerKey = key;
+        roomCountdown = null;
         var banner = build();
         bannerHost.Content = banner;
         bannerHost.Margin = banner is null ? new Thickness(0) : new Thickness(0, 0, 0, 10);
@@ -624,6 +634,19 @@ public sealed class FlyoutWindow : Window
             fe.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(300)));
             fe.RenderTransform.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(-6, 0, TimeSpan.FromMilliseconds(300)) { EasingFunction = new CubicEase() });
         }
+    }
+
+    /// <summary>"The room is getting darker. Dark in 0:42 if it stays." The seconds tick while the flyout is open.</summary>
+    private static string RoomText(Core.Scheduling.Theme theme, DateTimeOffset at, DateTimeOffset now)
+    {
+        var left = Math.Max(0, (int)Math.Ceiling((at - now).TotalSeconds));
+        var dark = theme == Core.Scheduling.Theme.Dark;
+        return $"The room is getting {(dark ? "darker" : "brighter")}. {theme} in {left / 60}:{left % 60:00} if it stays {(dark ? "dark" : "bright")}.";
+    }
+
+    private void TickCountdown()
+    {
+        if (roomCountdown is { } c) c.Text.Text = RoomText(c.Theme, c.At, DateTimeOffset.Now);
     }
 
     private static Border Banner(string bgKey, string lineKey, Geometry icon, string text, params (string Label, bool Primary, Action Do)[] actions)
@@ -650,7 +673,7 @@ public sealed class FlyoutWindow : Window
             stack.Children.Add(row);
         }
 
-        var border = new Border { CornerRadius = new CornerRadius(8), BorderThickness = new Thickness(1), Padding = new Thickness(12, 10, 12, 10), Child = stack };
+        var border = new Border { CornerRadius = new CornerRadius(8), BorderThickness = new Thickness(1), Padding = new Thickness(12, 10, 12, 10), Child = stack, Tag = message };
         border.SetResourceReference(Border.BackgroundProperty, bgKey);
         border.SetResourceReference(Border.BorderBrushProperty, lineKey);
         return border;
