@@ -170,10 +170,10 @@ public sealed class FlyoutWindow : Window
             texts.Children.Add(label);
             texts.Children.Add(value);
             texts.Children.Add(sub);
-            var content = new DockPanel();
-            content.Children.Add(iconBox);
-            content.Children.Add(texts);
-            var card = Ui.Card(content, new Thickness(10, 9, 10, 9));
+            var tileContent = new DockPanel();
+            tileContent.Children.Add(iconBox);
+            tileContent.Children.Add(texts);
+            var card = Ui.Card(tileContent, new Thickness(10, 9, 10, 9));
             card.Margin = new Thickness(i % 2 == 0 ? 0 : 3, i < 2 ? 0 : 3, i % 2 == 0 ? 3 : 0, i < 2 ? 3 : 0);
             Grid.SetColumn(card, i % 2);
             Grid.SetRow(card, i / 2);
