@@ -183,7 +183,10 @@ Toggle "Pointer and sounds follow the profile" (default on); off keeps the dayti
 Rules: No change / Dark below 20% (default) / Always dark on battery. Uses `PowerManager` battery and power-supply
 events. Toast when it switches ("Battery at 18%. Your schedule comes back when you plug in.").
 
-### Travel
+### Travel (dropped 2026-11-26)
+
+Celal dropped travel detection: the light sensor already follows the real light, and the place is changed in
+Settings when needed. The text below is kept for reference only.
 
 When the PC time zone changes (`SystemEvents.TimeChanged` + `TimeZoneInfo.ClearCachedData`):
 - "Follow me when I travel" on (default): find a city for the new zone (Windows location if allowed, otherwise
@@ -292,6 +295,7 @@ library choices (e.g. tray icon), test design, task order.
 - First run: "Choose a dynamic wallpaper" step in the welcome screen.
 - Screen brightness: not now.
 - English UI only.
+- No travel detection (2026-11-26): the place is changed by hand in Settings.
 
 ## Calls made by Claude (check these)
 

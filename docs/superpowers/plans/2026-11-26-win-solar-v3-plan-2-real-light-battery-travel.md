@@ -1,14 +1,16 @@
-# Win Solar 3 — Plan 2: Real light, battery mode, travel Implementation Plan
+# Win Solar 3 — Plan 2: Real light and battery mode Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** The theme follows the real light (the laptop's light sensor with hysteresis, 2-minute stability and self-calibration; Open-Meteo cloud cover when there is no sensor), goes dark on battery by rule, and follows the user when the PC time zone changes.
+**Goal:** The theme follows the real light (the laptop's light sensor with hysteresis, 2-minute stability and self-calibration; Open-Meteo cloud cover when there is no sensor), and goes dark on battery by rule.
 
-**Architecture:** All rules live in `WinSolar.Core` as pure code behind three new ports (`IPower`, `IRoomLight`, `IWeather`) that `SolarEngine` consults on every evaluation, so every rule is unit-tested with fakes. `WinSolar.App` gets three small services that implement those ports with WinRT APIs (`LightSensor`, `PowerManager`) and `HttpClient` (Open-Meteo), each one triggering an engine `Tick` when its input changes. Learned calibration and the last seen PC time zone live in a new `learned.json` owned by the App services (never by the engine, which owns `state.json`).
+> **Scope change (2026-11-26, Celal):** travel detection is dropped — the light sensor already follows the real light, and the place is one click away in Settings. Tasks 5 and 7 and every travel item below are removed; task numbers are kept so the ledger stays valid.
+
+**Architecture:** All rules live in `WinSolar.Core` as pure code behind three new ports (`IPower`, `IRoomLight`, `IWeather`) that `SolarEngine` consults on every evaluation, so every rule is unit-tested with fakes. `WinSolar.App` gets three small services that implement those ports with WinRT APIs (`LightSensor`, `PowerManager`) and `HttpClient` (Open-Meteo), each one triggering an engine `Tick` when its input changes. Learned calibration lives in a new `learned.json` owned by the App services (never by the engine, which owns `state.json`).
 
 **Tech Stack:** .NET 8, WPF, WinRT projections from `net8.0-windows10.0.19041.0` (`Windows.Devices.Sensors`, `Windows.System.Power`), `System.Text.Json`, xUnit.
 
-**Spec:** `docs/superpowers/specs/2026-11-26-win-solar-wpf-design.md` — sections "What decides the theme", "Real light", "Heads-up before a switch", "Battery", "Travel", "Timing", "Settings". UI wording: `docs/superpowers/specs/win-solar-demo.html`. Read `CLAUDE.md` first (rules, decisions, laptop facts).
+**Spec:** `docs/superpowers/specs/2026-11-26-win-solar-wpf-design.md` — sections "What decides the theme", "Real light", "Heads-up before a switch", "Battery", "Timing", "Settings". UI wording: `docs/superpowers/specs/win-solar-demo.html`. Read `CLAUDE.md` first (rules, decisions, laptop facts).
 
 ## Global Constraints
 
@@ -16,7 +18,7 @@
 - No PowerShell, scripts or child processes; Windows access only through Win32/WinRT.
 - No polling: one timer at the engine's next due moment; services trigger `EngineHost.Tick()` on events. The only periodic job added is the hourly weather refresh, and only while weather is in use.
 - UI copy English, short, matching the demo. Notices use Win Solar's own card (`CardNotifier`), never Windows toasts.
-- Spec values: sensor defaults dark below 60 lx / light above 150 lx; a change must last 2 minutes; `maxShift` 30 / 60 (default) / 90 min; weather factor clear 1, cloudy 0.6, overcast 0.3, storm 0.12; outdoor light `max(0, sin(elevation + 6°))`; threshold = clear-sky value at sunset `sin(5.167°)`; battery rules No change / Dark below 20% (default) / Always dark; "Follow me when I travel" on by default; weather refreshed about hourly.
+- Spec values: sensor defaults dark below 60 lx / light above 150 lx; a change must last 2 minutes; `maxShift` 30 / 60 (default) / 90 min; weather factor clear 1, cloudy 0.6, overcast 0.3, storm 0.12; outdoor light `max(0, sin(elevation + 6°))`; threshold = clear-sky value at sunset `sin(5.167°)`; battery rules No change / Dark below 20% (default) / Always dark; weather refreshed about hourly.
 - Saved files must stay readable: a Plan 1 `settings.json` / `state.json` loads with the new fields at their defaults.
 - Write a failing test first for every Core behaviour (`superpowers:test-driven-development`).
 - Work on branch `feat/plan-2-real-light`; merge to `main` (and fast-forward `v3-wpf`) only after Celal approves.
@@ -36,14 +38,13 @@
 
 ```
 src/WinSolar.Core/
-  Settings/AppSettings.cs        modify: FollowRealLight, MaxShiftMin, Battery, FollowMeWhenTraveling
-  Settings/LearnedState.cs       create: Calibration + PcZone (learned.json)
+  Settings/AppSettings.cs        modify: FollowRealLight, MaxShiftMin, Battery
+  Settings/LearnedState.cs       create: Calibration (learned.json)
   Power/Battery.cs               create: BatteryRule, PowerStatus, BatteryRules.IsDark
   Light/LightModel.cs            create: Daylight, WeatherFactor, WeatherLabel, Adjust, LightWindow
   Light/Weather.cs               create: HourWeather, WeatherForecast, OpenMeteo (url + parse)
   Light/RoomLightTracker.cs      create: Thresholds, hysteresis + 2-min stability
   Light/Calibration.cs           create: Calibration, CalibrationMath, CalibrationLearner
-  Travel/Travel.cs               create: CityFromZone, Moved
   Engine/Ports.cs                modify: IPower, IRoomLight, IWeather, LightInfo, snapshot fields
   Engine/NextDue.cs              modify: extra due moments
   Engine/SolarEngine.cs          modify: battery, room light, weather adjust, heads-up rules
@@ -51,18 +52,16 @@ src/WinSolar.App/
   Services/PowerService.cs       create: IPower via Windows.System.Power.PowerManager
   Services/LightSensorService.cs create: IRoomLight via Windows.Devices.Sensors.LightSensor + learning
   Services/WeatherService.cs     create: IWeather via Open-Meteo, hourly refresh
-  Services/TravelService.cs      create: time-zone change → new place / ask
   Services/LearnedStore.cs       create: learned.json load/save
   Services/EngineHost.cs         modify: build and wire the services
-  Notify/CardNotifier.cs         modify: Notice(...), battery/room/weather copy
+  Notify/CardNotifier.cs         modify: battery/room/weather copy
   Flyout/FlyoutWindow.cs         modify: environment chip, captions, banners, moved tiles
-  Settings/SettingsSheet.cs      modify: real light rows, learned thresholds + Reset, travel, Battery section
+  Settings/SettingsSheet.cs      modify: real light rows, learned thresholds + Reset, Battery section
 tests/WinSolar.Tests/
   Fakes/Fakes.cs                 modify: FakePower, FakeRoom, FakeWeather
   Settings/CompatTests.cs        create
   Power/BatteryTests.cs          create
   Light/LightModelTests.cs, Light/WeatherTests.cs, Light/RoomLightTrackerTests.cs, Light/CalibrationTests.cs  create
-  Travel/TravelTests.cs          create
   Engine/RealLightEngineTests.cs create (SolarEngineTests.cs: only the Rig constructor changes)
 ```
 
@@ -111,9 +110,9 @@ The whole-branch review of Plan 1 (2026-11-26) found three Important issues; the
 
 **Interfaces:**
 - Produces:
-  - `AppSettings` new init properties: `bool FollowRealLight = true`, `int MaxShiftMin = 60`, `BatteryRule Battery = BatteryRule.DarkBelow20`, `bool FollowMeWhenTraveling = true`; `TimeSpan MaxShift => TimeSpan.FromMinutes(Math.Clamp(MaxShiftMin, 30, 90))`.
+  - `AppSettings` new init properties: `bool FollowRealLight = true`, `int MaxShiftMin = 60`, `BatteryRule Battery = BatteryRule.DarkBelow20`; `TimeSpan MaxShift => TimeSpan.FromMinutes(Math.Clamp(MaxShiftMin, 30, 90))`.
   - `namespace WinSolar.Core.Power`: `enum BatteryRule { NoChange, DarkBelow20, AlwaysDark }`, `sealed record PowerStatus(bool OnBattery, int? Percent)` with `static PowerStatus Mains = new(false, null)`, `static class BatteryRules { static bool IsDark(BatteryRule rule, PowerStatus power) }`.
-  - `namespace WinSolar.Core.Settings`: `sealed record LearnedState(Calibration Calibration, string? PcZone)` with `static LearnedState Empty => new(Calibration.Empty, null)` (`Calibration` comes from Task 3; until then declare `LearnedState` in Task 3's commit, or write Task 3's `Calibration` record first — keep the build green).
+  - `namespace WinSolar.Core.Settings`: `sealed record LearnedState(Calibration Calibration)` with `static LearnedState Empty => new(Calibration.Empty)` (`Calibration` comes from Task 3; until then declare `LearnedState` in Task 3's commit, or write Task 3's `Calibration` record first — keep the build green).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -128,7 +127,6 @@ The whole-branch review of Plan 1 (2026-11-26) found three Important issues; the
     Assert.True(s.FollowRealLight);
     Assert.Equal(60, s.MaxShiftMin);
     Assert.Equal(BatteryRule.DarkBelow20, s.Battery);
-    Assert.True(s.FollowMeWhenTraveling);
 }
 [Fact] public void MaxShift_is_clamped_to_30_to_90_minutes()  // MaxShiftMin 5 → 30 min, 500 → 90 min
 // BatteryTests
@@ -147,7 +145,7 @@ public void IsDark(BatteryRule rule, bool onBattery, int percent, bool dark) =>
 - [ ] **Step 2: Run** `dotnet test --filter "FullyQualifiedName~CompatTests|FullyQualifiedName~BatteryTests"` — Expected: build errors (types missing).
 - [ ] **Step 3: Implement** the properties and types above. `IsDark`: `AlwaysDark` → `OnBattery`; `DarkBelow20` → `OnBattery && Percent <= 20`; else false.
 - [ ] **Step 4: Run** the same filter — Expected: PASS. Run `dotnet test` — all pass.
-- [ ] **Step 5: Commit** `feat(core): real-light, battery and travel settings with Plan 1 compatible defaults`
+- [ ] **Step 5: Commit** `feat(core): real-light and battery settings with Plan 1 compatible defaults`
 
 ---
 
@@ -226,7 +224,7 @@ public void Factor_from_cloud_cover(int cloud, double f) => Assert.Equal(f, Ligh
   - `sealed record Calibration(IReadOnlyList<double> Day, IReadOnlyList<double> Evening)`, `static Calibration Empty`.
   - `static class CalibrationMath`: `static readonly Thresholds Default = new(60, 150)`; `const int MinHours = 6`; `const int Keep = 48`; `bool IsLearned(Calibration c)` (both lists ≥ `MinHours` and median(Day) ≥ 1.5 × median(Evening)); `Thresholds For(Calibration c)` — Default unless learned; learned: in log space between `e = median(Evening)` and `d = median(Day)`: `DarkBelow = exp(ln e + 0.35 (ln d − ln e))`, `LightAbove = exp(ln e + 0.65 (ln d − ln e))`.
   - `sealed class CalibrationLearner(Calibration start)`: `Calibration Current`; `bool Add(DateTimeOffset at, double lux, double sunElevation)` — collects the readings of the current UTC hour into a day bucket (`sunElevation >= 10`) or an evening bucket (`sunElevation <= -6`), ignoring twilight and readings below 5 lx (lid closed, lights off); when a reading arrives in a new hour, each bucket from the finished hour with ≥ 3 readings adds its median to `Day`/`Evening` (keeping the last `Keep`); returns true when `Current` changed (the caller saves). `void Reset()` → `Empty`.
-- `namespace WinSolar.Core.Settings`: `sealed record LearnedState(Calibration Calibration, string? PcZone)`, `static LearnedState Empty`.
+- `namespace WinSolar.Core.Settings`: `sealed record LearnedState(Calibration Calibration)`, `static LearnedState Empty`.
 
 - [ ] **Step 1: Write the failing tests** (`t0` = any instant; `th` = `new Thresholds(60, 150)`)
 
@@ -314,20 +312,7 @@ public void Factor_from_cloud_cover(int cloud, double f) => Assert.Equal(f, Ligh
 
 ---
 
-### Task 5: Travel helpers
-
-**Files:**
-- Create: `src/WinSolar.Core/Travel/Travel.cs`
-- Test: `tests/WinSolar.Tests/Travel/TravelTests.cs`
-
-**Interfaces:**
-- Produces (`namespace WinSolar.Core.Travel`, class name `TravelRules` to avoid clashing with the namespace): `string? CityFromZone(string ianaId)` — last path segment with `_` → space (`"Europe/Istanbul"` → `"Istanbul"`, `"America/Argentina/Buenos_Aires"` → `"Buenos Aires"`), null for `Etc/*`, `UTC` and ids without `/`; `bool Moved(string? savedZone, string currentZone)` — false when `savedZone` is null (first run only records the zone), otherwise a case-insensitive inequality.
-
-- [ ] **Step 1: Write the failing tests** for the examples above plus `Moved(null, "X") == false`, `Moved("A", "a") == false`, `Moved("A", "B") == true`.
-- [ ] **Step 2: Run** `dotnet test --filter FullyQualifiedName~TravelTests` — Expected: build errors.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** — Expected: PASS.
-- [ ] **Step 5: Commit** `feat(core): travel helpers`
+### Task 5: (removed — travel dropped)
 
 ---
 
@@ -352,35 +337,19 @@ public void Factor_from_cloud_cover(int cloud, double f) => Assert.Equal(f, Ligh
 
 ---
 
-### Task 7: Travel service
-
-**Files:**
-- Create: `src/WinSolar.App/Services/TravelService.cs`
-- Modify: `src/WinSolar.App/Notify/CardNotifier.cs` (add `void Notice(Theme glyph, string title, string line, params (string Label, bool Primary, Action Do)[] buttons)`, a sticky card when buttons are given, else the 6.5 s notice), `src/WinSolar.App/Services/EngineHost.cs`, `src/WinSolar.App/App.xaml.cs`
-
-**Interfaces:**
-- Consumes: `TravelRules` (Task 5), `LearnedStore` (Task 6), existing `WindowsLocation.GetAsync()`, `PlaceSearch.SearchAsync(query, ct)`, `Places.Guess(iana, offset, now)`, `AppStateStore.UpdateSettings`.
-- Produces: `TravelService.CheckAsync()` — called on start and from `EngineHost.OnTimeChanged` (after `TimeZoneInfo.ClearCachedData()`). Steps: current IANA id (`PlaceSearch.LocalIana()`); if `!TravelRules.Moved(learned.PcZone, current)` → record the zone, done. Else find the destination: Windows location (10 s timeout, only when it returns a place) → else the first `PlaceSearch` result for `TravelRules.CityFromZone(current)` whose `TimeZoneId` matches the zone (else the first result) → else `Places.Guess`. Then:
-  - Follow on: `UpdateSettings(s => s with { Place = dest })`, `Tick`, notice title `Welcome to {dest.Name}`, line `New time zone found. Switch times now follow {dest.Name}, {dest.Country}.`
-  - Follow off: sticky notice `New time zone found`, line `Your PC is now on {zone with '_' → ' '}. Times still follow {current place}.`, buttons `Use {dest.Name}` (primary: set place, Tick) and `Keep {current place}`.
-  - Record the new zone in `learned.json` either way, so the question is asked once per move.
-
-- [ ] **Step 1:** Implement. `dotnet build` — 0 warnings.
-- [ ] **Step 2: Verify on the laptop:** Settings → Time & language → change the time zone to Istanbul with the app running → card "Welcome to Istanbul", flyout place Istanbul, times in Istanbul time. Turn "Follow me" off (Task 8) or set `FollowMeWhenTraveling=false` in `settings.json`, change the zone back → sticky card with "Use Blantyre" / "Keep Istanbul". Restore the time zone and place.
-- [ ] **Step 3: Commit** `feat(app): follow the user when the PC time zone changes`
+### Task 7: (removed — travel dropped)
 
 ---
 
 ### Task 8: UI — settings, flyout and notices
 
 **Files:**
-- Modify: `src/WinSolar.App/Settings/SettingsSheet.cs`, `src/WinSolar.App/Flyout/FlyoutWindow.cs`, `src/WinSolar.App/Notify/CardNotifier.cs`, `src/WinSolar.App/Theme/Ui.cs` (icons: `Bulb`, `Cloud`, `Storm`, `Bolt`, `Globe` from Lucide, 24×24 stroke like the others)
+- Modify: `src/WinSolar.App/Settings/SettingsSheet.cs`, `src/WinSolar.App/Flyout/FlyoutWindow.cs`, `src/WinSolar.App/Notify/CardNotifier.cs`, `src/WinSolar.App/Theme/Ui.cs` (icons: `Bulb`, `Cloud`, `Storm`, `Bolt` from Lucide, 24×24 stroke like the others)
 
 **Interfaces:**
 - Consumes: snapshot `Light`, `Power`, `BatteryDark` (Task 4), `LightSensorService.Thresholds/Calibration/ResetLearning` (Task 6) through `SheetContext` (add `Func<(bool HasSensor, Thresholds Thresholds, bool Learned)> RoomLight` and `Action ResetLearning`).
 - Copy (from the demo, verbatim):
   - Schedule section, when Source is Sun: `Follow the real light` — sub `Uses the light sensor in this PC` or `No light sensor found. Uses the weather in {place}`; when on: `Move a switch by at most` — sub `So a lamp or a passing cloud never flips the theme at noon`, segmented `30 min` / `1 hour` / `1.5 hours`. With a sensor, one more row: `Room light` — sub `Dark below {d:0} lx, light above {l:0} lx` + ` · learned` or ` · learning this room`, button `Reset learning`.
-  - After Location: `Follow me when I travel` — sub `Updates the location when the PC time zone changes`.
   - New section `Battery` before General: `On battery` — sub `Dark pixels use less power on OLED screens`, segmented `No change` / `Dark below 20%` / `Always dark`.
   - Flyout hero environment chip (next to the phase chip): Sensor → bulb + `{lux:0} lx`; Weather → cloud/storm/sun icon + `LightModel.WeatherLabel`; WeatherUnavailable → cloud + `Weather unavailable`; Off → hidden.
   - Caption in Auto: Sensor → `Until {Theme} around {time} · follows the room light`; Weather with `Next.ShiftMinutes != 0` → append ` · {label lower} sky, {n} min {before|after} {sunset|sunrise}`.
@@ -390,14 +359,14 @@ public void Factor_from_cloud_cover(int cloud, double f) => Assert.Equal(f, Ligh
 
 - [ ] **Step 1:** Implement the settings rows, flyout chip/caption/banners/tiles and notice copy. `dotnet build` — 0 warnings.
 - [ ] **Step 2: Verify on the laptop** against the demo (open `docs/superpowers/specs/win-solar-demo.html` next to the app): every row, chip and banner above appears with the demo's wording, in light and dark theme, at 200% scaling; the settings changes take effect immediately (e.g. switching Battery to `Always dark` while unplugged turns Dark); `Reset learning` puts the row back to `Dark below 60 lx, light above 150 lx · learning this room`.
-- [ ] **Step 3: Commit** `feat(app): real light, battery and travel in settings, flyout and notices`
+- [ ] **Step 3: Commit** `feat(app): real light and battery in settings, flyout and notices`
 
 ---
 
 ### Task 9: Release check and handover
 
 **Files:**
-- Modify: `CLAUDE.md` (State, Next, Decisions: thresholds algorithm, weather mapping, `learned.json`, `<= 20%`), `README.md` (feature list: real light, battery, travel)
+- Modify: `CLAUDE.md` (State, Next, Decisions: thresholds algorithm, weather mapping, `learned.json`, `<= 20%`, travel dropped), `README.md` (feature list: real light, battery)
 
 - [ ] **Step 1:** `dotnet test` — all pass. `pwsh build\release.ps1` — `Done: ...WinSolarSetup-3.0.0.exe`. Install it over the current copy (`/VERYSILENT /SUPPRESSMSGBOXES`), start it, check: flyout chip shows lux, Settings show the new rows, RAM in Task Manager stays under ~80 MB after 10 minutes with the sensor subscribed.
 - [ ] **Step 2:** Update `CLAUDE.md` and `README.md`; commit `docs: Plan 2 handover notes`.
