@@ -585,7 +585,7 @@ public sealed class FlyoutWindow : Window
             key = $"bat{percent}";
             build = () => Banner("AccentSoft", "AccentLine", Icons.Bolt, $"Dark while on battery{percent}. Your schedule comes back when you plug in.");
         }
-        else if (s.Mode == Mode.Auto && s.Hold is null && s.Light is { Source: LightSource.Sensor, Pending: { } pending })
+        else if (s.Mode == Mode.Auto && s.Hold is null && s.Light is { Source: LightSource.Sensor, Pending: { } pending } && pending.Theme != s.Applied)
         {
             key = $"room{pending.Theme}";
             build = () => Banner("AccentSoft", "AccentLine", Icons.Bulb, $"The room is getting {(pending.Theme == Core.Scheduling.Theme.Dark ? "darker" : "brighter")}. Checking that it lasts…");
