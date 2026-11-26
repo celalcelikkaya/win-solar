@@ -42,7 +42,6 @@ public sealed class FlyoutWindow : Window
 
     // hero
     private readonly Dictionary<Phase, Border> skies = [];
-    private readonly ContentControl chipContent = new();
     private readonly ContentControl envContent = new();
     private Border envChip = null!;
     private readonly TextBlock heroClock;
@@ -492,8 +491,6 @@ public sealed class FlyoutWindow : Window
 
         // hero
         SetPhase(sc.Phase);
-        var phaseLabel = sc.Phase switch { Phase.Day => "Daytime", Phase.Dawn => "Dawn", Phase.Dusk => "Dusk", _ => "Night" };
-        chipContent.Content = HeroRow(Ui.Glyph(sc.Theme, 13), phaseLabel);
         var env = s.Light.Source switch
         {
             LightSource.Sensor when s.Light.Lux is { } lux => HeroRow(Ui.Icon(Icons.Bulb, 13, "OnHero"), $"{lux:0} lx"),
@@ -781,15 +778,13 @@ public sealed class FlyoutWindow : Window
         AddSky(grid, Phase.Night, (0, "#0A1330"), (1, "#1A2A5C"));
         grid.Resources["OnHero"] = White;
 
-        var chip = new Border { CornerRadius = new CornerRadius(999), Padding = new Thickness(9, 4, 9, 4), Background = Frozen(Color.FromArgb(0x2E, 0xFF, 0xFF, 0xFF)), Child = chipContent };
         clock = new TextBlock { Foreground = White, FontWeight = FontWeights.SemiBold, FontSize = 12 };
         var clockBox = new Border { CornerRadius = new CornerRadius(999), Padding = new Thickness(8, 3, 8, 3), Background = Frozen(Color.FromArgb(0x2E, 0, 0, 0)), Child = clock, HorizontalAlignment = HorizontalAlignment.Right };
-        envChip = new Border { CornerRadius = new CornerRadius(999), Padding = new Thickness(9, 4, 9, 4), Margin = new Thickness(6, 0, 0, 0), Background = Frozen(Color.FromArgb(0x2E, 0xFF, 0xFF, 0xFF)), Child = envContent, Visibility = Visibility.Collapsed };
-        var chips = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Left };
-        chips.Children.Add(chip);
-        chips.Children.Add(envChip);
+        envChip = new Border { Padding = new Thickness(2, 3, 0, 3), Child = envContent, Visibility = Visibility.Collapsed, VerticalAlignment = VerticalAlignment.Center }; // plain, no pill (Celal)
+        // No phase chip ("Night", "Daytime"): the sky and the sun or moon already say it (Celal, 2026-11-27).
+        envChip.HorizontalAlignment = HorizontalAlignment.Left;
         var top = new Grid();
-        top.Children.Add(chips);
+        top.Children.Add(envChip);
         top.Children.Add(clockBox);
 
         var canvas = new Canvas { Width = 320, Height = 118 };
