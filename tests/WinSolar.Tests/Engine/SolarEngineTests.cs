@@ -30,7 +30,7 @@ public class SolarEngineTests
             Clock = new FakeClock(now);
             Theme = new FakeTheme(windowsTheme);
             Store = new MemoryStore(settings ?? new AppSettings { Place = Blantyre }, state);
-            Engine = new SolarEngine(Clock, Theme, Notifier, FullScreen, Store, Blantyre);
+            Engine = new SolarEngine(Clock, Theme, Notifier, FullScreen, Store, Blantyre, new FakePower(), new FakeRoom(), new FakeWeather());
         }
 
         public EngineSnapshot TickAt(DateTimeOffset t)

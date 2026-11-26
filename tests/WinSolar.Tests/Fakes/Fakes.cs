@@ -1,5 +1,7 @@
 using WinSolar.Core.Decisions;
 using WinSolar.Core.Engine;
+using WinSolar.Core.Light;
+using WinSolar.Core.Power;
 using WinSolar.Core.Scheduling;
 using WinSolar.Core.Settings;
 
@@ -60,4 +62,25 @@ internal sealed class MemoryStore(AppSettings settings, AppState? state = null) 
         State = value;
         Saves++;
     }
+}
+
+internal sealed class FakePower : IPower
+{
+    public PowerStatus Status { get; set; } = PowerStatus.Mains;
+    public PowerStatus Read() => Status;
+}
+
+internal sealed class FakeRoom : IRoomLight
+{
+    public bool Available { get; set; }
+    public double? Lux { get; set; }
+    public Theme? Theme { get; set; }
+    public (Theme Theme, DateTimeOffset At)? Pending { get; set; }
+    public Theme? Current(DateTimeOffset now) => Theme;
+}
+
+internal sealed class FakeWeather : IWeather
+{
+    public HourWeather? Now { get; set; }
+    public HourWeather? At(DateTimeOffset t) => Now is { } w ? w with { Hour = t } : null;
 }

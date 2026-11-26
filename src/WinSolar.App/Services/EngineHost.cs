@@ -19,7 +19,8 @@ public sealed class EngineHost : IDisposable
     {
         Store = store;
         dispatcher = Dispatcher.CurrentDispatcher;
-        Engine = new SolarEngine(new SystemClock(), new WindowsTheme(), notifier, new FullScreenProbe(), store, GuessPlace());
+        Engine = new SolarEngine(new SystemClock(), new WindowsTheme(), notifier, new FullScreenProbe(), store, GuessPlace(),
+            new NoPower(), new NoRoomLight(), new NoWeather());
         Engine.Changed += OnChanged;
 
         timer = new DispatcherTimer(DispatcherPriority.Normal, dispatcher);
@@ -95,4 +96,23 @@ public sealed class EngineHost : IDisposable
         timer.Stop();
         fullScreenPoll.Stop();
     }
+}
+
+// Placeholders until the Windows services land (Plan 2, Task 6).
+internal sealed class NoPower : IPower
+{
+    public WinSolar.Core.Power.PowerStatus Read() => WinSolar.Core.Power.PowerStatus.Mains;
+}
+
+internal sealed class NoRoomLight : IRoomLight
+{
+    public bool Available => false;
+    public double? Lux => null;
+    public (WinSolar.Core.Scheduling.Theme Theme, DateTimeOffset At)? Pending => null;
+    public WinSolar.Core.Scheduling.Theme? Current(DateTimeOffset now) => null;
+}
+
+internal sealed class NoWeather : IWeather
+{
+    public WinSolar.Core.Light.HourWeather? At(DateTimeOffset t) => null;
 }

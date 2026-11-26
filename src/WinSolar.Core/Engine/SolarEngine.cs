@@ -1,4 +1,6 @@
 using WinSolar.Core.Decisions;
+using WinSolar.Core.Light;
+using WinSolar.Core.Power;
 using WinSolar.Core.Presentation;
 using WinSolar.Core.Scheduling;
 using WinSolar.Core.Settings;
@@ -18,6 +20,9 @@ public sealed class SolarEngine
     private readonly INotifier notifier;
     private readonly IFullScreenProbe fullScreen;
     private readonly IStateStore store;
+    private readonly IPower power;
+    private readonly IRoomLight room;
+    private readonly IWeather weather;
 
     private AppState state;
     private AppState savedState;
@@ -30,7 +35,8 @@ public sealed class SolarEngine
     private bool userAction;
     private string? error;
 
-    public SolarEngine(IClock clock, IThemeApplier theme, INotifier notifier, IFullScreenProbe fullScreen, IStateStore store, Place fallbackPlace)
+    public SolarEngine(IClock clock, IThemeApplier theme, INotifier notifier, IFullScreenProbe fullScreen, IStateStore store, Place fallbackPlace,
+        IPower power, IRoomLight room, IWeather weather)
     {
         this.clock = clock;
         this.theme = theme;
@@ -38,6 +44,9 @@ public sealed class SolarEngine
         this.fullScreen = fullScreen;
         this.store = store;
         FallbackPlace = fallbackPlace;
+        this.power = power;
+        this.room = room;
+        this.weather = weather;
         state = savedState = store.State;
     }
 
@@ -136,7 +145,12 @@ public sealed class SolarEngine
         ClearExpired(now);
         var s = Recompute(now);
         ClearCaughtUp(s);
-        var decision = ThemeDecider.Decide(new DecisionInput(state.Mode, state.Hold, false, null, false, s));
+        var source = Source(now);
+        var powerNow = power.Read();
+        var batteryDark = BatteryRules.IsDark(Settings.Battery, powerNow);
+        var inWindow = LightModel.InWindow(now, s.SunEvents, Settings.MaxShift);
+        var roomTheme = source == LightSource.Sensor ? room.Current(now) : null;
+        var decision = ThemeDecider.Decide(new DecisionInput(state.Mode, state.Hold, batteryDark, roomTheme, inWindow, s));
         var isFullScreen = fullScreen.IsFullScreen();
 
         // Windows changed behind our back: respect it until the decision itself changes.
@@ -169,7 +183,7 @@ public sealed class SolarEngine
             waiting = false;
         }
 
-        UpdateHeadsUp(now, s, isFullScreen);
+        UpdateHeadsUp(now, s, isFullScreen || source == LightSource.Sensor || batteryDark);
 
         if (state != savedState)
         {
@@ -184,8 +198,16 @@ public sealed class SolarEngine
             }
         }
 
-        NextDue = global::WinSolar.Core.Engine.NextDue.Compute(now, s, state.Hold, state.ManualUntil, HeadsUpLead);
-        var snapshot = new EngineSnapshot(s, state.Mode, state.ManualUntil, state.Hold, applied, waiting, headsUp, Place, error);
+        NextDue = global::WinSolar.Core.Engine.NextDue.Compute(now, s, state.Hold, state.ManualUntil, HeadsUpLead, ExtraDue(source, s));
+        var snapshot = new EngineSnapshot(s, state.Mode, state.ManualUntil, state.Hold, applied, waiting, headsUp, Place, error,
+            new LightInfo(
+                source,
+                source == LightSource.Sensor ? room.Lux : null,
+                source == LightSource.Weather ? weather.At(now) : null,
+                source == LightSource.Sensor ? room.Pending : null,
+                inWindow),
+            powerNow,
+            batteryDark);
         Changed?.Invoke(snapshot);
         return snapshot;
     }
@@ -216,13 +238,14 @@ public sealed class SolarEngine
             notifier.Switched(target, cause, Recompute(clock.Now).Next);
     }
 
-    private void UpdateHeadsUp(DateTimeOffset now, Schedule s, bool isFullScreen)
+    /// <param name="quiet">No heads-up: full screen, sensor mode (the time is not known in advance) or battery mode.</param>
+    private void UpdateHeadsUp(DateTimeOffset now, Schedule s, bool quiet)
     {
         var next = s.Next;
         var eligible = Settings.HeadsUp
             && state.Mode == Mode.Auto
             && state.Hold is null
-            && !isFullScreen
+            && !quiet
             && next is not null
             && next.Theme != applied
             && next.At > now
@@ -264,6 +287,32 @@ public sealed class SolarEngine
             state = state with { Hold = null };
     }
 
-    private Schedule Recompute(DateTimeOffset now) =>
-        ScheduleCalculator.Compute(now, Place, Settings.ToScheduleOptions());
+    private Schedule Recompute(DateTimeOffset now)
+    {
+        Func<DateTimeOffset, TransitionKind, DateTimeOffset>? adjust = null;
+        if (Source(now) == LightSource.Weather)
+        {
+            var place = Place;
+            var maxShift = Settings.MaxShift;
+            adjust = (t, kind) => LightModel.Adjust(t, kind, place,
+                at => weather.At(at) is { } w ? LightModel.WeatherFactor(w) : 1, maxShift);
+        }
+
+        return ScheduleCalculator.Compute(now, Place, Settings.ToScheduleOptions(), adjust);
+    }
+
+    /// <summary>Spec: the sensor decides when there is one; otherwise the weather moves the sun times.</summary>
+    private LightSource Source(DateTimeOffset now) =>
+        !Settings.FollowRealLight || Settings.Source != ScheduleSource.Sun ? LightSource.Off
+        : room.Available ? LightSource.Sensor
+        : weather.At(now) is not null ? LightSource.Weather
+        : LightSource.WeatherUnavailable;
+
+    /// <summary>Extra moments to look again: a room change about to count, and the light window's edges.</summary>
+    private IEnumerable<DateTimeOffset> ExtraDue(LightSource source, Schedule s)
+    {
+        if (source == LightSource.Off) return [];
+        var edges = LightModel.WindowEdges(s.SunEvents, Settings.MaxShift);
+        return source == LightSource.Sensor && room.Pending is { } p ? edges.Append(p.At) : edges;
+    }
 }

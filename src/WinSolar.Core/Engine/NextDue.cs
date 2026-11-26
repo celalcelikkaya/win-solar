@@ -9,7 +9,8 @@ public static class NextDue
     /// <summary>Longest sleep between checks (also covers polar days and the date rolling over).</summary>
     public static readonly TimeSpan MaxWait = TimeSpan.FromHours(6);
 
-    public static DateTimeOffset Compute(DateTimeOffset now, Schedule s, Hold? hold, DateTimeOffset? manualUntil, TimeSpan headsUpLead)
+    public static DateTimeOffset Compute(DateTimeOffset now, Schedule s, Hold? hold, DateTimeOffset? manualUntil, TimeSpan headsUpLead,
+        IEnumerable<DateTimeOffset> extra)
     {
         var due = now + MaxWait;
         void Consider(DateTimeOffset? t)
@@ -21,6 +22,7 @@ public static class NextDue
         Consider(s.Next?.At);
         Consider(hold?.Until);
         Consider(manualUntil);
+        foreach (var t in extra) Consider(t);
         return due;
     }
 }

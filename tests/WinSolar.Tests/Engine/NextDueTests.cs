@@ -14,7 +14,7 @@ public class NextDueTests
     {
         var s = LightSchedule;
         var now = s.Next!.At.AddHours(-1);
-        Assert.Equal(s.Next.At - Lead, NextDue.Compute(now, s, null, null, Lead));
+        Assert.Equal(s.Next.At - Lead, NextDue.Compute(now, s, null, null, Lead, []));
     }
 
     [Fact]
@@ -22,7 +22,7 @@ public class NextDueTests
     {
         var s = LightSchedule;
         var now = s.Next!.At.AddMinutes(-3);
-        Assert.Equal(s.Next.At, NextDue.Compute(now, s, null, null, Lead));
+        Assert.Equal(s.Next.At, NextDue.Compute(now, s, null, null, Lead, []));
     }
 
     [Fact]
@@ -31,7 +31,7 @@ public class NextDueTests
         var s = LightSchedule;
         var now = s.Next!.At.AddHours(-3);
         var hold = new Hold(Theme.Light, now.AddMinutes(10), HoldKind.Pause);
-        Assert.Equal(now.AddMinutes(10), NextDue.Compute(now, s, hold, null, Lead));
+        Assert.Equal(now.AddMinutes(10), NextDue.Compute(now, s, hold, null, Lead, []));
     }
 
     [Fact]
@@ -39,7 +39,7 @@ public class NextDueTests
     {
         var s = LightSchedule with { Next = null };
         var now = DateTimeOffset.UnixEpoch.AddYears(56);
-        var due = NextDue.Compute(now, s, null, now.AddHours(-1), Lead);
+        var due = NextDue.Compute(now, s, null, now.AddHours(-1), Lead, []);
         Assert.Equal(now + NextDue.MaxWait, due);
     }
 }
