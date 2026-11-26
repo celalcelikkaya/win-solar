@@ -75,4 +75,56 @@ internal static partial class Native
 
     [DllImport("user32.dll")]
     public static extern uint GetDpiForSystem();
+
+    // --- windows that never take focus (notification card, OSD) ---
+    public const int GwlExStyle = -20;
+    public const long WsExNoActivate = 0x08000000;
+    public const long WsExToolWindow = 0x00000080;
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
+    public static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int index);
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")]
+    public static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int index, IntPtr value);
+
+    public static void MakeNoActivate(IntPtr hwnd)
+    {
+        var style = GetWindowLongPtr(hwnd, GwlExStyle).ToInt64();
+        SetWindowLongPtr(hwnd, GwlExStyle, new IntPtr(style | WsExNoActivate | WsExToolWindow));
+    }
+
+    // --- taskbar position ---
+    public const uint AbmGetTaskbarPos = 5;
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct AppBarData
+    {
+        public uint Size;
+        public IntPtr Hwnd;
+        public uint CallbackMessage;
+        public uint Edge;
+        public Rect Rc;
+        public IntPtr LParam;
+    }
+
+    [DllImport("shell32.dll")]
+    public static extern UIntPtr SHAppBarMessage(uint message, ref AppBarData data);
+
+    // --- global shortcut ---
+    public const int WmHotkey = 0x0312;
+    public const uint ModShift = 0x0004;
+    public const uint ModWin = 0x0008;
+    public const uint ModNoRepeat = 0x4000;
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool RegisterHotKey(IntPtr hWnd, int id, uint modifiers, uint vk);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+
+    // --- notification state ---
+    public const int QunsNotPresent = 1;
+    public const int QunsQuietTime = 6;
 }
