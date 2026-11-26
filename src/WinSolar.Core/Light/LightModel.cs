@@ -44,11 +44,4 @@ public static class LightModel
             if (Daylight(t, place) * factorAt(t) >= Threshold) return t;
         return sunEvent + maxShift;
     }
-
-    /// <summary>Inside the light window: within maxShift of an astronomical sunrise or sunset.</summary>
-    public static bool InWindow(DateTimeOffset now, IReadOnlyList<DateTimeOffset> sunEvents, TimeSpan maxShift) =>
-        sunEvents.Any(e => (now - e).Duration() <= maxShift);
-
-    public static IEnumerable<DateTimeOffset> WindowEdges(IReadOnlyList<DateTimeOffset> sunEvents, TimeSpan maxShift) =>
-        sunEvents.SelectMany(e => new[] { e - maxShift, e + maxShift });
 }

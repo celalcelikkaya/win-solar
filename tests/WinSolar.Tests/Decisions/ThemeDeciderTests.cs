@@ -14,33 +14,33 @@ public class ThemeDeciderTests
     [Fact]
     public void Manual_beats_everything() =>
         Assert.Equal(new Decision(Theme.Dark, Cause.Manual),
-            ThemeDecider.Decide(new DecisionInput(Mode.Dark, AnyHold(Theme.Light), true, Theme.Light, true, LightSchedule)));
+            ThemeDecider.Decide(new DecisionInput(Mode.Dark, AnyHold(Theme.Light), true, Theme.Light, LightSchedule)));
 
     [Fact]
     public void Battery_beats_hold_and_schedule() =>
         Assert.Equal(Cause.Battery,
-            ThemeDecider.Decide(new DecisionInput(Mode.Auto, AnyHold(Theme.Light), true, null, false, LightSchedule)).Cause);
+            ThemeDecider.Decide(new DecisionInput(Mode.Auto, AnyHold(Theme.Light), true, null, LightSchedule)).Cause);
 
     [Fact]
     public void Hold_beats_room_and_schedule() =>
         Assert.Equal(Theme.Light,
-            ThemeDecider.Decide(new DecisionInput(Mode.Auto, AnyHold(Theme.Light), false, Theme.Dark, true, DarkSchedule)).Theme);
+            ThemeDecider.Decide(new DecisionInput(Mode.Auto, AnyHold(Theme.Light), false, Theme.Dark, DarkSchedule)).Theme);
 
     [Fact]
     public void SwitchNow_hold_has_its_own_cause() =>
         Assert.Equal(Cause.SwitchNow,
-            ThemeDecider.Decide(new DecisionInput(Mode.Auto, new Hold(Theme.Dark, DateTimeOffset.MaxValue, HoldKind.SwitchNow), false, null, false, LightSchedule)).Cause);
+            ThemeDecider.Decide(new DecisionInput(Mode.Auto, new Hold(Theme.Dark, DateTimeOffset.MaxValue, HoldKind.SwitchNow), false, null, LightSchedule)).Cause);
 
     [Fact]
-    public void Room_only_counts_inside_light_window()
+    public void Known_room_decides_over_the_schedule()
     {
-        Assert.Equal(Cause.Room, ThemeDecider.Decide(new DecisionInput(Mode.Auto, null, false, Theme.Dark, true, LightSchedule)).Cause);
-        Assert.Equal(Theme.Light, ThemeDecider.Decide(new DecisionInput(Mode.Auto, null, false, Theme.Dark, false, LightSchedule)).Theme);
+        Assert.Equal(new Decision(Theme.Dark, Cause.Room), ThemeDecider.Decide(new DecisionInput(Mode.Auto, null, false, Theme.Dark, LightSchedule)));
+        Assert.Equal(new Decision(Theme.Light, Cause.Room), ThemeDecider.Decide(new DecisionInput(Mode.Auto, null, false, Theme.Light, DarkSchedule)));
     }
 
     [Fact]
     public void Schedule_cause_is_previous_transition_kind() =>
-        Assert.Equal(Cause.Sunset, ThemeDecider.Decide(new DecisionInput(Mode.Auto, null, false, null, false, DarkSchedule)).Cause);
+        Assert.Equal(Cause.Sunset, ThemeDecider.Decide(new DecisionInput(Mode.Auto, null, false, null, DarkSchedule)).Cause);
 
     [Theory]
     [InlineData(Cause.Sunset, true)]

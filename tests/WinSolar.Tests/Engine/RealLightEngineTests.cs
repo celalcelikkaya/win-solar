@@ -56,54 +56,75 @@ public class RealLightEngineTests
 
     private static HourWeather Cloud(int percent, bool storm = false) => new(default, percent, storm);
 
+    private static AppSettings RoomMode => new() { Place = Blantyre, Source = ScheduleSource.RoomLight };
+
     [Fact]
-    public void Room_dark_inside_window_switches_early()
+    public void Dark_room_switches_to_dark_at_noon()
     {
-        var r = new Rig(Noon, Theme.Light).WithSensor(Theme.Dark);
+        var r = new Rig(Noon, Theme.Light, RoomMode).WithSensor(null);
         r.Engine.Start();
-        var s = r.TickAt(Sunset.AddMinutes(-40));
+        r.Room.Theme = Theme.Dark;
+        r.Room.Lux = 40;
+        var s = r.TickAt(Noon.AddMinutes(5));
         Assert.Equal(Theme.Dark, s.Applied);
         Assert.Equal((Theme.Dark, Cause.Room), Assert.Single(r.Notifier.Switches));
         Assert.Equal(LightSource.Sensor, s.Light.Source);
-        Assert.True(s.Light.InWindow);
         Assert.Equal(40, s.Light.Lux);
     }
 
     [Fact]
-    public void Room_outside_window_is_ignored()
+    public void Bright_room_switches_to_light_at_night()
+    {
+        var r = new Rig(Sunset.AddHours(5), Theme.Dark, RoomMode).WithSensor(null);
+        r.Engine.Start();
+        r.Room.Theme = Theme.Light;
+        Assert.Equal(Theme.Light, r.TickAt(Sunset.AddHours(5).AddMinutes(3)).Applied);
+    }
+
+    [Fact]
+    public void Room_mode_follows_the_sun_until_the_room_is_known()
+    {
+        var r = new Rig(Sunset.AddHours(1), Theme.Light, RoomMode).WithSensor(null);
+        Assert.Equal(Theme.Dark, r.Engine.Start().Applied);
+    }
+
+    [Fact]
+    public void Room_mode_without_a_sensor_follows_the_sun()
+    {
+        var r = new Rig(Sunset.AddHours(1), Theme.Light, RoomMode);
+        var s = r.Engine.Start();
+        Assert.Equal(Theme.Dark, s.Applied);
+        Assert.NotEqual(LightSource.Sensor, s.Light.Source);
+    }
+
+    [Fact]
+    public void Sun_mode_ignores_the_room()
     {
         var r = new Rig(Noon, Theme.Light).WithSensor(Theme.Dark);
-        Assert.Equal(Theme.Light, r.Engine.Start().Applied);
-        Assert.Equal(0, r.Theme.Applies);
-        r.Room.Theme = Theme.Light;
-        Assert.Equal(Theme.Dark, r.TickAt(Sunset.AddHours(5)).Applied);
-    }
-
-    [Fact]
-    public void Room_light_holds_light_until_the_window_ends()
-    {
-        var r = new Rig(Noon, Theme.Light).WithSensor(Theme.Light);
         r.Engine.Start();
-        Assert.Equal(Theme.Light, r.TickAt(Sunset.AddMinutes(30)).Applied);
-        Assert.Equal(Theme.Dark, r.TickAt(Sunset.AddMinutes(61)).Applied);
-        Assert.Equal((Theme.Dark, Cause.Sunset), Assert.Single(r.Notifier.Switches));
+        var s = r.TickAt(Sunset.AddMinutes(-40));
+        Assert.Equal(Theme.Light, s.Applied);
+        Assert.NotEqual(LightSource.Sensor, s.Light.Source);
+        Assert.Null(s.Light.Lux);
     }
 
     [Fact]
-    public void No_heads_up_in_sensor_mode()
+    public void No_heads_up_in_room_mode()
     {
-        var r = new Rig(Noon, Theme.Light).WithSensor(null);
+        var r = new Rig(Noon, Theme.Light, RoomMode).WithSensor(null);
         r.Engine.Start();
         r.TickAt(Sunset.AddMinutes(-4));
         Assert.Empty(r.Notifier.HeadsUps);
     }
 
     [Fact]
-    public void Sensor_wins_over_weather()
+    public void Weather_moves_sunset_in_sun_mode_even_with_a_sensor()
     {
         var r = new Rig(Noon, Theme.Light).WithSensor(null);
         r.Weather.Now = Cloud(100, storm: true);
-        Assert.Equal(Sunset, r.Engine.Start().Schedule.Next!.At);
+        var s = r.Engine.Start();
+        Assert.True(s.Schedule.Next!.At < Sunset);
+        Assert.Equal(LightSource.Weather, s.Light.Source);
     }
 
     [Fact]
@@ -127,26 +148,34 @@ public class RealLightEngineTests
     }
 
     [Fact]
-    public void Real_light_off_ignores_sensor_and_weather()
+    public void Real_light_off_ignores_weather()
     {
-        var r = new Rig(Noon, Theme.Light, new AppSettings { Place = Blantyre, FollowRealLight = false }).WithSensor(Theme.Dark);
+        var r = new Rig(Noon, Theme.Light, new AppSettings { Place = Blantyre, FollowRealLight = false });
         r.Weather.Now = Cloud(100);
-        r.Engine.Start();
-        var s = r.TickAt(Sunset.AddMinutes(-40));
-        Assert.Equal(Theme.Light, s.Applied);
+        var s = r.Engine.Start();
         Assert.Equal(Sunset, s.Schedule.Next!.At);
         Assert.Equal(LightSource.Off, s.Light.Source);
     }
 
     [Fact]
-    public void Polar_night_ignores_room_light()
+    public void Polar_night_bright_room_is_light()
     {
         var noon = At("2026-12-15T12:00", "Europe/Oslo");
-        var r = new Rig(noon, Theme.Light, place: Tromso).WithSensor(Theme.Light);
-        var s = r.Engine.Start();
-        Assert.Equal(Theme.Dark, s.Applied);
-        Assert.False(s.Light.InWindow);
+        var r = new Rig(noon, Theme.Dark, RoomMode with { Place = Tromso }, Tromso).WithSensor(Theme.Light);
+        Assert.Equal(Theme.Light, r.Engine.Start().Applied);
         Assert.True(r.Engine.NextDue > noon);
+    }
+
+    [Fact]
+    public void Shortcut_back_to_auto_follows_the_room()
+    {
+        var r = new Rig(Sunset.AddHours(3), Theme.Light, RoomMode).WithSensor(Theme.Light);
+        r.Engine.Start();
+        r.Engine.Shortcut();
+        Assert.Equal(Mode.Dark, r.TickAt(Sunset.AddHours(3)).Mode);
+        var (theme, detail) = r.Engine.Shortcut();
+        Assert.Equal(Theme.Light, theme);
+        Assert.Equal("Back to Auto", detail);
     }
 
     [Fact]
@@ -201,14 +230,11 @@ public class RealLightEngineTests
     }
 
     [Fact]
-    public void Next_due_includes_window_edge_and_room_pending()
+    public void Next_due_includes_a_room_change_about_to_count()
     {
-        var r = new Rig(Noon, Theme.Light).WithSensor(null);
+        var r = new Rig(Noon, Theme.Light, RoomMode).WithSensor(null);
         r.Room.Pending = (Theme.Dark, Noon.AddMinutes(2));
         r.Engine.Start();
         Assert.Equal(Noon.AddMinutes(2), r.Engine.NextDue);
-        r.Room.Pending = null;
-        r.TickAt(Noon);
-        Assert.Equal(Sunset.AddMinutes(-60), r.Engine.NextDue);
     }
 }

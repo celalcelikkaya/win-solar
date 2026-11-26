@@ -73,10 +73,11 @@ Staying on Electron was ruled out for RAM and PowerShell latency.
    When the rule stops matching (plugged in, or above 20%), the schedule takes over again.
 3. **Hold**: Snooze (keep current theme until the next switch + 15 min), Skip (keep it until the switch after next),
    Pause (1 hour, from the tray menu) and Switch now. Holds are saved to disk and survive restarts and reboots.
-4. **Room light** (only when a light sensor exists and "Follow the real light" is on): inside the light window (see
-   below) the sensor decides.
-5. **Schedule**: sunrise/sunset (optionally moved by weather when there is no sensor) plus the user's offsets, or
-   fixed times.
+4. **Room light** ("Switch by: Room light", only with a light sensor): the sensor decides at any hour, dark room →
+   Dark, bright room → Light. Changed 2026-11-27 (Celal): it used to count only inside a light window around sunrise
+   and sunset; day/night and the room are now separate choices, and the light window below no longer applies.
+5. **Schedule**: sunrise/sunset (optionally moved by weather) plus the user's offsets, or fixed times. Room light
+   mode uses sunrise/sunset until the room is known or when there is no sensor.
 
 Full-screen rule: if an automatic switch (2–5) becomes due while a full-screen app is in the foreground, wait and
 switch right after the user leaves full screen. Manual changes and the shortcut apply immediately.

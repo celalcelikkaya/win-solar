@@ -41,15 +41,32 @@ public static class SettingsSheet
     public static void Build(StackPanel body, SheetContext ctx)
     {
         var s = ctx.Settings;
+        var light = ctx.Host.Light;
 
         body.Children.Add(Section("Schedule"));
+        List<(string, ScheduleSource)> sources = [("Sunrise and sunset", ScheduleSource.Sun)];
+        if (light.Available || s.Source == ScheduleSource.RoomLight) sources.Add(("Room light", ScheduleSource.RoomLight));
+        sources.Add(("Fixed times", ScheduleSource.Fixed));
         var schedule = new List<UIElement>
         {
-            Row("Switch by", null, Segmented<ScheduleSource>(
-                [("Sunrise and sunset", ScheduleSource.Sun), ("Fixed times", ScheduleSource.Fixed)], s.Source,
-                v => ctx.Change(x => x with { Source = v })), stacked: true),
+            Row("Switch by", null, Segmented<ScheduleSource>([.. sources], s.Source, v => ctx.Change(x => x with { Source = v })), stacked: true),
         };
-        if (s.Source == ScheduleSource.Sun)
+        if (s.Source == ScheduleSource.RoomLight)
+        {
+            var t = light.Thresholds;
+            var reset = Ui.Button("Pill", "Reset learning", () =>
+            {
+                light.ResetLearning();
+                ctx.Flyout.RebuildSheet(b => Build(b, ctx));
+            });
+            reset.VerticalAlignment = VerticalAlignment.Center;
+            schedule.Add(Row("Room light",
+                light.Available
+                    ? $"Dark below {t.DarkBelow:0} lx, light above {t.LightAbove:0} lx, at any hour · {(light.Learned ? "learned" : "learning this room")}"
+                    : "No light sensor found. Follows sunrise and sunset instead",
+                light.Available ? reset : new Border()));
+        }
+        else if (s.Source == ScheduleSource.Sun)
         {
             schedule.Add(Row("Light theme", "Minutes after sunrise. Minus means before.",
                 Stepper(s.OffsetSunriseMin, v => ctx.Change(x => x with { OffsetSunriseMin = v }))));
@@ -63,30 +80,14 @@ public static class SettingsSheet
         }
 
         var place = ctx.Host.Last?.Place;
-        if (s.Source == ScheduleSource.Sun)
+        if (s.Source != ScheduleSource.Fixed && !(s.Source == ScheduleSource.RoomLight && light.Available))
         {
-            var light = ctx.Host.Light;
-            schedule.Add(Row("Follow the real light",
-                light.Available ? "Uses the light sensor in this PC" : $"No light sensor found. Uses the weather in {place?.Name ?? "your city"}",
+            schedule.Add(Row("Follow the weather", $"Clouds over {place?.Name ?? "your city"} move sunrise and sunset",
                 Switch(s.FollowRealLight, v => ctx.Change(x => x with { FollowRealLight = v }))));
             if (s.FollowRealLight)
-            {
-                schedule.Add(Row("Move a switch by at most", "So a lamp or a passing cloud never flips the theme at noon",
+                schedule.Add(Row("Move a switch by at most", "So a passing cloud never flips the theme at noon",
                     Segmented<int>([("30 min", 30), ("1 hour", 60), ("1.5 hours", 90)], s.MaxShiftMin,
                         v => ctx.Change(x => x with { MaxShiftMin = v })), stacked: true));
-                if (light.Available)
-                {
-                    var t = light.Thresholds;
-                    var reset = Ui.Button("Pill", "Reset learning", () =>
-                    {
-                        light.ResetLearning();
-                        ctx.Flyout.RebuildSheet(b => Build(b, ctx));
-                    });
-                    reset.VerticalAlignment = VerticalAlignment.Center;
-                    schedule.Add(Row("Room light",
-                        $"Dark below {t.DarkBelow:0} lx, light above {t.LightAbove:0} lx · {(light.Learned ? "learned" : "learning this room")}", reset));
-                }
-            }
         }
 
         var locationButton = Ui.Button("FlatButton", LinkRow("Location", place is null ? "" : string.Join(", ", new[] { place.Name, place.Country }.Where(x => !string.IsNullOrEmpty(x)))),

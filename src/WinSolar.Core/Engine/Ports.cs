@@ -61,7 +61,7 @@ public interface IWeather
 public enum LightSource { Off, Sensor, Weather, WeatherUnavailable }
 
 /// <summary>What real light is doing now, for the flyout.</summary>
-public sealed record LightInfo(LightSource Source, double? Lux, HourWeather? Weather, (Theme Theme, DateTimeOffset At)? Pending, bool InWindow);
+public sealed record LightInfo(LightSource Source, double? Lux, HourWeather? Weather, (Theme Theme, DateTimeOffset At)? Pending);
 
 /// <summary>Everything the UI needs to draw the current moment.</summary>
 public sealed record EngineSnapshot(

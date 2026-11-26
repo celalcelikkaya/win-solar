@@ -16,11 +16,11 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
   - `Sun/SunCalculator.cs` offline NOAA sun times (port of v2 `src/lib/sun.ts`) + sun elevation
   - `Scheduling/ScheduleCalculator.cs` prev/next/after switch, phase, progress, in the **place's** time zone;
     `adjust` hook moves sunrise/sunset for weather (`Light/LightModel.Adjust`)
-  - `Decisions/ThemeDecider.cs` priority Manual > Battery > Hold > Room light > Schedule; `ShouldDefer` (full screen)
+  - `Decisions/ThemeDecider.cs` priority Manual > Battery > Hold > Room light (room mode) > Schedule; `ShouldDefer` (full screen)
   - `Engine/SolarEngine.cs` the heart: Start/Tick, heads-up, holds (snooze/skip/pause/switch now), shortcut, NextDue
   - `Settings/` `AppSettings`, `AppState`, `LearnedState`, atomic `JsonFileStore` (`%AppData%\Win Solar\settings.json`,
     `state.json` owned by the engine, `learned.json` owned by the App services, `log.txt`)
-  - `Light/` outdoor light model + weather factor + light window, Open-Meteo parsing, `RoomLightTracker` (hysteresis +
+  - `Light/` outdoor light model + weather factor, Open-Meteo parsing, `RoomLightTracker` (hysteresis +
     2-min stability), `Calibration` (self-learned thresholds); `Power/Battery.cs` battery rules
   - Engine ports for Plan 2: `IPower`, `IRoomLight`, `IWeather` (`Engine/Ports.cs`); snapshot has `Light`, `Power`,
     `BatteryDark`, `Error`
@@ -37,7 +37,7 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
 
 ## Commands (on Celal's laptop, repo at `D:\Projects\win-solar`)
 
-- Test: `dotnet test`  (126 tests, all passing after Plan 2)
+- Test: `dotnet test`  (128 tests, all passing)
 - Run: `dotnet run --project src\WinSolar.App` (quit the installed copy first; single instance)
 - Installer: `pwsh build\release.ps1` → `dist\WinSolarSetup-3.0.0.exe` (+ `SHA256SUMS.txt`)
 - C: has little free space: `NUGET_PACKAGES` points to `D:\.nuget\packages`; keep build output on D:.
@@ -109,8 +109,11 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
 - "Start with Windows" writes the Run key automatically only for the installed copy (not from `bin/`).
 - Sounds per profile will be Normal/Off only (no clean "Quiet" in Windows). No paid code signing for now: free
   measures only (version info, per-user, no PowerShell, Defender submission, README SmartScreen note).
-- Plan 2: the sensor decides when there is one; weather (Open-Meteo cloud cover → factor `1 − 0.7·(cloud/100)^1.5`,
-  storm codes 95–99 → 0.12) only without a sensor. Learned thresholds sit at 35% / 65% between this room's evening
+- "Switch by" has three choices: Sunrise and sunset, Room light, Fixed times (Celal, 2026-11-27: day/night and the
+  room are separate features). Room light: the sensor decides at any hour (dark room → Dark, bright room → Light,
+  2-min stability, hysteresis), sun times until the room is known or without a sensor; no heads-up. Sunrise and
+  sunset: the weather (Open-Meteo cloud cover → factor `1 − 0.7·(cloud/100)^1.5`, storm codes 95–99 → 0.12) moves
+  the switches by at most the max shift when "Follow the weather" is on; the sensor is not used. Learned thresholds sit at 35% / 65% between this room's evening
   and daytime hourly medians in log space (needs 6 hours of each, day ≥ 1.5× evening; else 60 / 150 lx).
   "Dark below 20%" includes 20% (as the demo). Weather requests allow 30 s (Open-Meteo took 8–17 s on the laptop's
   network) and retry after 5 min.

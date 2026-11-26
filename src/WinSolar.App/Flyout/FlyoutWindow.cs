@@ -511,15 +511,23 @@ public sealed class FlyoutWindow : Window
                 : next.Kind == TransitionKind.Sunset ? "Until sunset"
                 : next.Kind == TransitionKind.Sunrise ? "Until sunrise" : "Until the scheduled time";
             captionText.Text = $"{label} · {When(next.At)}";
-            if (s.Mode == Mode.Auto && s.Light.Source == LightSource.Sensor)
-                captionText.Text = $"{label} around {When(next.At)} · follows the room light";
-            else if (s.Mode == Mode.Auto && s.Light.Source == LightSource.Weather && next.ShiftMinutes != 0 && s.Light.Weather is { } wx)
+            if (s.Mode == Mode.Auto && s.Light.Source == LightSource.Weather && next.ShiftMinutes != 0 && s.Light.Weather is { } wx)
                 captionText.Text += $" · {LightModel.WeatherLabel(wx).ToLowerInvariant()} sky, {Math.Abs(next.ShiftMinutes)} min {(next.ShiftMinutes < 0 ? "before" : "after")} {(next.Kind == TransitionKind.Sunset ? "sunset" : "sunrise")}";
         }
         else
         {
             bigText.Text = sc.Today.Polar == PolarState.Day ? "Midnight sun" : "Polar night";
             captionText.Text = sc.Today.Polar == PolarState.Day ? "The sun does not set today" : "The sun does not rise today";
+        }
+
+        // room light mode: the room decides, so there is no countdown to a sun switch
+        if (s.Mode == Mode.Auto && s.Hold is null && s.Light is { Source: LightSource.Sensor, Lux: { } roomLux })
+        {
+            var th = host.Light.Thresholds;
+            bigText.Text = roomLux <= th.DarkBelow ? "Dark room" : roomLux >= th.LightAbove ? "Bright room" : "Dim room";
+            captionText.Text = s.Applied == Core.Scheduling.Theme.Dark
+                ? $"Light when the room is above {th.LightAbove:0} lx"
+                : $"Dark when the room is below {th.DarkBelow:0} lx";
         }
 
         targetProgress = sc.Prev is { } a && sc.Next is { } b ? Math.Clamp((now - a.At) / (b.At - a.At), 0, 1) : 0.5;
@@ -532,14 +540,15 @@ public sealed class FlyoutWindow : Window
         for (var i = 0; i < 3; i++) segButtons[i].SetResourceReference(ForegroundProperty, (int)s.Mode == i ? "OnAccent" : "Ink2");
         PlaceThumb(animate: true);
         hint.Text = s.Mode == Mode.Auto
-            ? settings.Source == ScheduleSource.Sun ? "Follows sunrise and sunset" : $"Light at {Time(sc.TodayLight?.At)}, Dark at {Time(sc.TodayDark?.At)}"
+            ? s.Light.Source == LightSource.Sensor ? "Follows the room light"
+            : settings.Source != ScheduleSource.Fixed ? "Follows sunrise and sunset" : $"Light at {Time(sc.TodayLight?.At)}, Dark at {Time(sc.TodayDark?.At)}"
             : s.ManualUntil is { } until ? $"{s.Mode} until {When(until)}, then back to Auto" : $"{s.Mode} until you change it";
 
         // tiles
         var t = sc.Today;
         var dayLen = t.Sunrise is { } r && t.Sunset is { } st ? Format.Duration((int)Math.Round((st - r).TotalMinutes))
             : t.Polar == PolarState.Day ? "24 h" : t.Polar == PolarState.Night ? "0 min" : "--";
-        if (settings.Source == ScheduleSource.Sun)
+        if (settings.Source != ScheduleSource.Fixed)
         {
             SetTile(0, Icons.Sunrise, "Sunrise", Time(t.Sunrise), settings.OffsetSunriseMin != 0 || sc.TodayLight?.ShiftMinutes is not (null or 0) ? $"Light at {Time(sc.TodayLight?.At)}" : "");
             SetTile(1, Icons.Sunset, "Sunset", Time(t.Sunset), settings.OffsetSunsetMin != 0 || sc.TodayDark?.ShiftMinutes is not (null or 0) ? $"Dark at {Time(sc.TodayDark?.At)}" : "");
@@ -576,7 +585,7 @@ public sealed class FlyoutWindow : Window
             key = $"bat{percent}";
             build = () => Banner("AccentSoft", "AccentLine", Icons.Bolt, $"Dark while on battery{percent}. Your schedule comes back when you plug in.");
         }
-        else if (s.Mode == Mode.Auto && s.Hold is null && s.Light is { Source: LightSource.Sensor, InWindow: true, Pending: { } pending })
+        else if (s.Mode == Mode.Auto && s.Hold is null && s.Light is { Source: LightSource.Sensor, Pending: { } pending })
         {
             key = $"room{pending.Theme}";
             build = () => Banner("AccentSoft", "AccentLine", Icons.Bulb, $"The room is getting {(pending.Theme == Core.Scheduling.Theme.Dark ? "darker" : "brighter")}. Checking that it lasts…");

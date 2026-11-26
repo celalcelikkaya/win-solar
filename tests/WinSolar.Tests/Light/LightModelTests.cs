@@ -52,19 +52,4 @@ public class LightModelTests
     [InlineData(90, true, "Storm")]
     public void Labels(int cloud, bool storm, string label) =>
         Assert.Equal(label, LightModel.WeatherLabel(new HourWeather(default, cloud, storm)));
-
-    [Fact]
-    public void InWindow_is_true_within_maxShift_of_any_sun_event()
-    {
-        var events = new[] { Sunrise, Sunset };
-        var hour = TimeSpan.FromMinutes(60);
-        Assert.True(LightModel.InWindow(Sunset.AddMinutes(-60), events, hour));
-        Assert.False(LightModel.InWindow(Sunset.AddMinutes(61), events, hour));
-        Assert.False(LightModel.InWindow(Day.Noon, events, hour));
-    }
-
-    [Fact]
-    public void Window_edges_surround_each_event() =>
-        Assert.Equal(new[] { Sunrise.AddMinutes(-30), Sunrise.AddMinutes(30) },
-            LightModel.WindowEdges(new[] { Sunrise }, TimeSpan.FromMinutes(30)));
 }

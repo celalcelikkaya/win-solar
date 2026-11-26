@@ -1,3 +1,4 @@
+using WinSolar.Core.Scheduling;
 using WinSolar.Core.Power;
 using WinSolar.Core.Settings;
 
@@ -24,4 +25,8 @@ public class CompatTests
     [InlineData(500, 90)]
     public void MaxShift_is_clamped_to_30_to_90_minutes(int setting, int minutes) =>
         Assert.Equal(TimeSpan.FromMinutes(minutes), new AppSettings { MaxShiftMin = setting }.MaxShift);
+
+    [Fact]
+    public void Room_light_mode_uses_sun_times_for_its_schedule() =>
+        Assert.Equal(ScheduleSource.Sun, new AppSettings { Source = ScheduleSource.RoomLight }.ToScheduleOptions().Source);
 }

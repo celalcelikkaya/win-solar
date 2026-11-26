@@ -31,7 +31,8 @@ public sealed record AppSettings
     /// <summary>How far real light may move a switch: 30, 60 or 90 minutes.</summary>
     public TimeSpan MaxShift => TimeSpan.FromMinutes(Math.Clamp(MaxShiftMin, 30, 90));
 
-    public ScheduleOptions ToScheduleOptions() => new(Source, OffsetSunriseMin, OffsetSunsetMin, FixedLight, FixedDark);
+    public ScheduleOptions ToScheduleOptions() =>
+        new(Source == ScheduleSource.RoomLight ? ScheduleSource.Sun : Source, OffsetSunriseMin, OffsetSunsetMin, FixedLight, FixedDark);
 }
 
 /// <summary>What must survive a restart: mode, manual end, hold, and the last theme Win Solar applied.</summary>
