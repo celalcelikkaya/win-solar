@@ -1,7 +1,7 @@
 # Win Solar 3 — WPF rewrite and new features
 
 Date: 2026-11-26
-Status: ready for Celal's approval
+Status: approved by Celal (2026-11-26)
 Reference demo: `docs/superpowers/specs/win-solar-demo.html` (open in a browser; same page as the private artifact Celal reviewed)
 
 ## Intent
@@ -241,6 +241,21 @@ Inno Setup 6 (as Harbor), per-user install, start-with-Windows via the `HKCU\...
 The installer detects Win Solar 2 (Electron, appId `com.winsolar.app`): closes it, removes its start-with-Windows
 entry and runs its uninstaller (asks first).
 
+### Keeping Windows from getting in the way (no paid signing)
+
+Celal asked that Windows not cause trouble when installing or using the app. Paid code signing is out for now:
+Azure Artifact Signing is open to individuals only in the USA and Canada, and a CA certificate costs money yearly and
+still does not remove SmartScreen right away. So v3 does everything that is free:
+- Per-user install, `requestedExecutionLevel asInvoker` in the app manifest: no UAC prompt, ever.
+- Full version resources on the exe and installer (product "Win Solar", company "Celal Çelikkaya", file version,
+  description) so Windows and antivirus show a real name, not "Unknown".
+- No PowerShell, no script hosts, no packers or obfuscation; ReadyToRun is fine.
+- Release checklist step: submit the installer and exe to Microsoft Defender's file submission as a false positive
+  check before publishing; publish SHA-256 checksums with each GitHub release.
+- The README explains the one-time SmartScreen screen on the installer ("More info → Run anyway"). The installed app
+  itself never shows it.
+- Signing can be added later without code changes (a step in the release script).
+
 ## Structure (builder may adjust)
 
 ```
@@ -275,4 +290,4 @@ library choices (e.g. tray icon, notifications), test design, task order.
   by at most 1 hour by default.
 - v2 settings are not migrated; the v3 installer removes v2 (asks first).
 - Version 3.0.0, same GitHub repo, work on branch `v3-wpf`, Electron code removed only after parity.
-- No code signing (Windows SmartScreen will warn on first install, as with Harbor).
+- No paid code signing for now (see "Keeping Windows from getting in the way"); the free measures there are in scope.
