@@ -1,7 +1,7 @@
 # Win Solar 3 — WPF rewrite and new features
 
 Date: 2026-11-26
-Status: draft, waiting for Celal's approval
+Status: ready for Celal's approval
 Reference demo: `docs/superpowers/specs/win-solar-demo.html` (open in a browser; same page as the private artifact Celal reviewed)
 
 ## Intent
@@ -146,14 +146,26 @@ Toggle "Pointer and sounds follow the profile" (default on); off keeps the dayti
   themselves); "Restore" puts it back and sets mode to Off.
 - Sun mode uses **macOS dynamic wallpapers (.heic) that the user imports** (Celal's choice). Apple's own sets are
   copyrighted and are not shipped; users bring their own (e.g. free sets from dynamicwallpaper.club).
-  - Import: pick a `.heic` file; Win Solar extracts every frame to PNG at screen resolution into
-    `%AppData%\Win Solar\Wallpapers\<name>\` and reads the frame schedule from the file's metadata:
-    solar sets (`apple_desktop:solar`: sun altitude/azimuth per frame) are matched against the current sun position;
-    time-based sets (`apple_desktop:h24`) by time of day. Several sets can be imported; one is active.
-  - Windows cannot decode HEIF on its own: add a decoding library (e.g. Magick.NET or a libheif wrapper; a few MB).
-  - Frame changes set the Windows wallpaper via `IDesktopWallpaper` (Windows' own short fade).
-  - First run without an imported set: **open question for Celal**, see end.
-  - Demo fallback model (8 frames by elevation) is only a reference for how often frames change.
+  - **Original images only** (Celal): no drawn or generated fallback set, and no quality loss on import.
+  - Import: pick a `.heic` file (drag and drop also works). Win Solar:
+    1. Reads every image in the file at its **original resolution** (Apple sets are typically 5K or 6K); no
+       downscaling, no cropping. Windows' "Fill" handles fitting to the 2160x1440 screen.
+    2. Converts color correctly: Apple frames are usually Display P3 with an embedded profile; convert to sRGB with
+       the profile (not by dropping it), so colors don't look washed out on Windows.
+    3. Saves each frame as lossless PNG in `%AppData%\Win Solar\Wallpapers\<set name>\` (D: is not needed; a set is
+       ~50–150 MB, show the size before importing and the free space on C:).
+    4. Reads the frame schedule from the file's XMP metadata: solar sets (`apple_desktop:solar`, sun altitude and
+       azimuth per frame) are matched to the current sun position at the chosen place; time-based sets
+       (`apple_desktop:h24`) by time of day; light/dark-only sets (`apple_desktop:apr`) by theme.
+    5. Shows a preview strip of all frames with when each one appears, then "Use this wallpaper".
+    6. Clear errors for a plain (non-dynamic) HEIC, a damaged file or missing decoder support, naming what is wrong.
+  - Several sets can be imported; one is active; sets can be deleted.
+  - Windows cannot decode HEIF on its own: add a decoding library (e.g. Magick.NET with libheif; a few MB) instead of
+    relying on the Store "HEIF Image Extensions".
+  - Frame changes set the Windows wallpaper via `IDesktopWallpaper` (Windows' own short fade), only when the frame
+    actually changes.
+  - **First run:** the welcome screen shows "Wallpaper moves with the sun" with a "Choose a dynamic wallpaper"
+    button. Until a set is imported, Win Solar does not touch the wallpaper.
 
 ### Battery
 
@@ -203,7 +215,7 @@ when clicking outside, 24-hour clock) · About (version, Check for updates).
 
 ### First run
 
-Every feature on: real light, sun wallpaper, profiles, Roller, heads-up, wait for full screen, battery `Dark below
+Every feature on: real light, sun wallpaper (active once a set is chosen in the welcome screen), profiles, Roller, heads-up, wait for full screen, battery `Dark below
 20%`, travel, shortcut, start with Windows. Save the user's wallpaper first. Open the flyout with the Welcome sheet
 listing these with one switch each and "Start using Win Solar".
 
@@ -250,9 +262,17 @@ library choices (e.g. tray icon, notifications), test design, task order.
 ## Decided with Celal
 
 - Source of truth is the GitHub repo; the PC copy is not needed (Celal deletes local copies after pushing).
-- Sun wallpaper images: imported macOS dynamic wallpapers (.heic).
+- Sun wallpaper images: imported macOS dynamic wallpapers (.heic), original quality, no built-in drawn set.
+- First run: "Choose a dynamic wallpaper" step in the welcome screen.
+- Screen brightness: not now.
+- English UI only.
 
-## Open questions for Celal
+## Calls made by Claude (check these)
 
-1. First run has no dynamic wallpaper yet: a "Choose a dynamic wallpaper" step in the welcome screen, or also a small
-   built-in drawn set that works right away?
+- Sounds per profile: Normal / Off only ("Quiet" from the demo has no clean Windows equivalent).
+- Accent color: kept only if the undocumented registry approach proves reliable on Celal's laptop.
+- Light-sensor defaults 60 / 150 lx with self-calibration; changes must last 2 minutes; real light may move a switch
+  by at most 1 hour by default.
+- v2 settings are not migrated; the v3 installer removes v2 (asks first).
+- Version 3.0.0, same GitHub repo, work on branch `v3-wpf`, Electron code removed only after parity.
+- No code signing (Windows SmartScreen will warn on first install, as with Harbor).
