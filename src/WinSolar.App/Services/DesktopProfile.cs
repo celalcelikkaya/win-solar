@@ -26,7 +26,7 @@ public sealed class DesktopProfile(string folder)
 
     public bool AccentAvailable { get; private set; } = Native.GetAccent() is not null;
 
-    /// <summary>Applies everything but the apps/taskbar theme. Returns true when something changed.</summary>
+    /// <summary>Applies everything but the theme itself. Returns true when something changed.</summary>
     public bool Apply(Look look)
     {
         var changed = false;

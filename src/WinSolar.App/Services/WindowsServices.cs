@@ -14,7 +14,7 @@ public sealed class SystemClock : IClock
 }
 
 /// <summary>
-/// Apps theme, taskbar theme (by its rule) and the profile (accent, pointer, sounds), then one broadcast; the switch
+/// Apps, taskbar and Start theme and the profile (accent, pointer, sounds), then one broadcast; the switch
 /// itself runs behind <see cref="SwitchOverlay"/>. Writes only what changed. Outside changes are read from the apps theme.
 /// </summary>
 public sealed class WindowsTheme(Func<AppSettings> settings, DesktopProfile profile, SwitchOverlay overlay) : IThemeApplier
@@ -29,7 +29,7 @@ public sealed class WindowsTheme(Func<AppSettings> settings, DesktopProfile prof
 
     public void Apply(Theme theme) => overlay.Run(settings().Animation, () => Write(theme));
 
-    /// <summary>Settings changed: bring the taskbar and profile in line with the current theme, without animation.</summary>
+    /// <summary>Settings changed: bring the profile in line with the current theme, without animation.</summary>
     public void Refresh() => Write(Read());
 
     private void Write(Theme theme)
@@ -38,8 +38,8 @@ public sealed class WindowsTheme(Func<AppSettings> settings, DesktopProfile prof
         var changed = false;
         using (var key = Registry.CurrentUser.CreateSubKey(KeyPath))
         {
-            changed |= SetFlag(key, "AppsUseLightTheme", look.Apps == Theme.Light);
-            changed |= SetFlag(key, "SystemUsesLightTheme", look.Taskbar == Theme.Light);
+            changed |= SetFlag(key, "AppsUseLightTheme", look.Theme == Theme.Light);
+            changed |= SetFlag(key, "SystemUsesLightTheme", look.Theme == Theme.Light);
         }
 
         changed |= profile.Apply(look);

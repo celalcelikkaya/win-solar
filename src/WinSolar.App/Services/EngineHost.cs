@@ -73,7 +73,7 @@ public sealed class EngineHost : IDisposable
         RefreshLook(); // a profile setting may not match yet (first run, or changed while Win Solar was closed)
     }
 
-    /// <summary>Brings the taskbar, accent, pointer and sounds in line with the current theme (no animation).</summary>
+    /// <summary>Brings the accent, pointer and sounds in line with the current theme (no animation).</summary>
     public void RefreshLook()
     {
         try

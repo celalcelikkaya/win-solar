@@ -5,6 +5,9 @@
 **Goal:** A switch is painted over the screen (Roller, or Fade, or Instant), the Day and Night profiles change the
 accent color, mouse pointer and sounds with the theme, and the taskbar can follow the switch or keep one theme.
 
+> **Scope change (2026-11-27, Celal):** no separate taskbar theme; apps, taskbar and Start always follow the switch.
+> `TaskbarTheme` and the "Taskbar and Start" row were removed after Task 4; `Look` became `Look(Theme, Accent, Pointer, Sounds)`.
+
 **Architecture:** Core gets the settings model and pure rules (`Desktop/DesktopLook.cs`: which accent, pointer, sounds
 and taskbar theme a given theme means; accent swatches). The engine is unchanged: it still calls
 `IThemeApplier.Apply(theme)`. In the App, `WindowsTheme` becomes the place where a switch happens: it asks

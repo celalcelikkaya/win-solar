@@ -10,29 +10,17 @@ public class DesktopLookTests
 
     [Fact]
     public void Light_theme_uses_the_day_profile() =>
-        Assert.Equal(new Look(Theme.Light, Theme.Light, "#0067c0", Pointer.White, Sounds.Normal), DesktopLook.For(Theme.Light, Defaults));
+        Assert.Equal(new Look(Theme.Light, "#0067c0", Pointer.White, Sounds.Normal), DesktopLook.For(Theme.Light, Defaults));
 
     [Fact]
     public void Dark_theme_uses_the_night_profile() =>
-        Assert.Equal(new Look(Theme.Dark, Theme.Dark, "#6b69d6", Pointer.Black, Sounds.Normal), DesktopLook.For(Theme.Dark, Defaults));
+        Assert.Equal(new Look(Theme.Dark, "#6b69d6", Pointer.Black, Sounds.Normal), DesktopLook.For(Theme.Dark, Defaults));
 
     [Fact]
     public void Pointer_and_sounds_stay_daytime_when_not_following()
     {
         var s = Defaults with { ProfilesFollow = false, Night = new Profile("#e3008c", Pointer.Black, Sounds.Off) };
-        Assert.Equal(new Look(Theme.Dark, Theme.Dark, "#e3008c", Pointer.White, Sounds.Normal), DesktopLook.For(Theme.Dark, s));
-    }
-
-    [Theory]
-    [InlineData(TaskbarTheme.Follow, Theme.Light, Theme.Light)]
-    [InlineData(TaskbarTheme.Follow, Theme.Dark, Theme.Dark)]
-    [InlineData(TaskbarTheme.AlwaysDark, Theme.Light, Theme.Dark)]
-    [InlineData(TaskbarTheme.AlwaysLight, Theme.Dark, Theme.Light)]
-    public void Taskbar_follows_or_keeps_one_theme(TaskbarTheme rule, Theme theme, Theme taskbar)
-    {
-        var look = DesktopLook.For(theme, Defaults with { Taskbar = rule });
-        Assert.Equal(taskbar, look.Taskbar);
-        Assert.Equal(theme, look.Apps);
+        Assert.Equal(new Look(Theme.Dark, "#e3008c", Pointer.White, Sounds.Normal), DesktopLook.For(Theme.Dark, s));
     }
 
     [Fact]

@@ -136,10 +136,7 @@ public static class SettingsSheet
                 Segmented<SwitchAnimation>([("Roller", SwitchAnimation.Roller), ("Fade", SwitchAnimation.Fade), ("Instant", SwitchAnimation.Instant)],
                     s.Animation, v => ctx.Change(x => x with { Animation = v })), stacked: true),
             Row("Pointer and sounds follow the profile", "Off keeps your daytime pointer and sounds",
-                Switch(s.ProfilesFollow, v => ctx.Change(x => x with { ProfilesFollow = v }))),
-            Row("Taskbar and Start", "Follow the switch, or keep one theme",
-                Segmented<TaskbarTheme>([("Follow", TaskbarTheme.Follow), ("Always dark", TaskbarTheme.AlwaysDark), ("Always light", TaskbarTheme.AlwaysLight)],
-                    s.Taskbar, v => ctx.Change(x => x with { Taskbar = v })), stacked: true)));
+                Switch(s.ProfilesFollow, v => ctx.Change(x => x with { ProfilesFollow = v })))));
 
         body.Children.Add(Section("General"));
         body.Children.Add(Group(

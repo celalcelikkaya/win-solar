@@ -7,9 +7,6 @@ namespace WinSolar.Core.Desktop;
 /// <summary>How a switch changes the screen: painted over top to bottom, crossfaded, or at once.</summary>
 public enum SwitchAnimation { Roller, Fade, Instant }
 
-/// <summary>"Taskbar and Start": follow the switch, or keep one theme.</summary>
-public enum TaskbarTheme { Follow, AlwaysDark, AlwaysLight }
-
 /// <summary>Windows' own pointer schemes: Windows Default (white) or Windows Black.</summary>
 public enum Pointer { White, Black }
 
@@ -19,8 +16,8 @@ public enum Sounds { Normal, Off }
 /// <summary>What a Day or Night profile sets. <paramref name="Accent"/> is one of <see cref="Accents.Swatches"/>.</summary>
 public sealed record Profile(string Accent, Pointer Pointer, Sounds Sounds);
 
-/// <summary>Everything Windows should show for one theme.</summary>
-public sealed record Look(Theme Apps, Theme Taskbar, string Accent, Pointer Pointer, Sounds Sounds);
+/// <summary>Everything Windows should show for one theme (apps, taskbar and Start all follow <paramref name="Theme"/>).</summary>
+public sealed record Look(Theme Theme, string Accent, Pointer Pointer, Sounds Sounds);
 
 public static class DesktopLook
 {
@@ -29,13 +26,7 @@ public static class DesktopLook
     {
         var profile = theme == Theme.Light ? s.Day : s.Night;
         var daytime = s.ProfilesFollow ? profile : s.Day;
-        var taskbar = s.Taskbar switch
-        {
-            TaskbarTheme.AlwaysDark => Theme.Dark,
-            TaskbarTheme.AlwaysLight => Theme.Light,
-            _ => theme,
-        };
-        return new Look(theme, taskbar, profile.Accent, daytime.Pointer, daytime.Sounds);
+        return new Look(theme, profile.Accent, daytime.Pointer, daytime.Sounds);
     }
 }
 

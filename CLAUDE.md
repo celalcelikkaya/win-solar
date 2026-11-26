@@ -30,7 +30,7 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
   - `Services/WindowsServices.cs` theme via registry + `WM_SETTINGCHANGE`, full-screen probe
   - `Services/DesktopProfile.cs` accent (uxtheme ordinals 120/122), pointer (Cursors + `SPI_SETCURSORS`), sounds
     (AppEvents scheme; the user's own sounds saved in `saved-sounds.json` while Off); `WindowsTheme` applies apps +
-    taskbar theme + profile behind `Overlay/SwitchOverlay.cs` (Roller/Fade/Instant)
+    taskbar theme (always the same as the apps) + profile behind `Overlay/SwitchOverlay.cs` (Roller/Fade/Instant)
   - `Services/LightSensorService.cs` (WinRT LightSensor), `PowerService.cs` (PowerManager), `WeatherService.cs`
     (Open-Meteo, hourly, only without a sensor), `LearnedStore.cs`, `Log.cs`
   - `Flyout/FlyoutWindow.cs` the tray flyout (built in code), `Settings/SettingsSheet.cs` settings + location sheets
@@ -41,7 +41,7 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
 
 ## Commands (on Celal's laptop, repo at `D:\Projects\win-solar`)
 
-- Test: `dotnet test`  (138 tests, all passing)
+- Test: `dotnet test`  (134 tests, all passing)
 - Run: `dotnet run --project src\WinSolar.App` (quit the installed copy first; single instance)
 - Installer: `pwsh build\release.ps1` → `dist\WinSolarSetup-3.0.0.exe` (+ `SHA256SUMS.txt`)
 - C: has little free space: `NUGET_PACKAGES` points to `D:\.nuget\packages`; keep build output on D:.
@@ -89,7 +89,7 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
 3. **Dynamic wallpaper is not there yet**: expected, it is Plan 4.
 
 - Plan 3 (branch `feat/plan-3-switch-and-profiles`): Roller/Fade/Instant switch overlay, Day/Night profiles (accent,
-  pointer, sounds), taskbar theme Follow/Always dark/Always light, Room light as its own "Switch by" choice (merged
+  pointer, sounds), Room light as its own "Switch by" choice (merged
   before Plan 3). Checked live by Celal: Roller from the shortcut and the flyout.
 
 ## Next (one plan each, written with `superpowers:writing-plans`, executed with `superpowers:executing-plans`)
@@ -133,3 +133,4 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
   1.6 s, and fades 0.3 s to any app that repainted even later. A fixed 450 ms wait missed slow apps (Celal saw no roll).
 - Night profile sounds default Normal (the demo's "Quiet" does not exist; Off is opt-in). The profile is re-applied at
   start and on every settings change (only what differs is written).
+- No separate taskbar theme (Celal, 2026-11-27): apps, taskbar and Start always follow the switch together.

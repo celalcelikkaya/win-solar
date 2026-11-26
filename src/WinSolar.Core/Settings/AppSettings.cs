@@ -30,7 +30,6 @@ public sealed record AppSettings
 
     // Plan 3
     public SwitchAnimation Animation { get; init; } = SwitchAnimation.Roller;
-    public TaskbarTheme Taskbar { get; init; } = TaskbarTheme.Follow;
     public Profile Day { get; init; } = new("#0067c0", Pointer.White, Sounds.Normal);
     public Profile Night { get; init; } = new("#6b69d6", Pointer.Black, Sounds.Normal);
 

@@ -38,7 +38,6 @@ public class CompatTests
         File.WriteAllText(Path.Combine(dir, "settings.json"), """{ "Source": "RoomLight", "FollowRealLight": true, "Schema": 3 }""");
         var s = new JsonFileStore(dir).Load("settings.json", () => new AppSettings());
         Assert.Equal(SwitchAnimation.Roller, s.Animation);
-        Assert.Equal(TaskbarTheme.Follow, s.Taskbar);
         Assert.Equal(new Profile("#0067c0", Pointer.White, Sounds.Normal), s.Day);
         Assert.Equal(new Profile("#6b69d6", Pointer.Black, Sounds.Normal), s.Night);
         Assert.True(s.ProfilesFollow);

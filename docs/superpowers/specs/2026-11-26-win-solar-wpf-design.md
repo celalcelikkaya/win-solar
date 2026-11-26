@@ -125,7 +125,8 @@ toast: Windows toasts cannot be styled and felt loud. The card, as in the demo:
 
 - Apps and system theme via `HKCU\...\Themes\Personalize` (`AppsUseLightTheme`, `SystemUsesLightTheme`) and a
   `WM_SETTINGCHANGE` "ImmersiveColorSet" broadcast, all in-process (no PowerShell).
-- "Taskbar and Start": Follow (default) / Always dark / Always light → controls `SystemUsesLightTheme` separately.
+- Apps, taskbar and Start always switch together (`AppsUseLightTheme` and `SystemUsesLightTheme`). A separate
+  "Taskbar and Start" setting was dropped (Celal, 2026-11-27).
 - Only write what changed. Starting the app when the theme is already right changes nothing.
 
 ### Switch animation (Roller, default)
