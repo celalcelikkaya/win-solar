@@ -36,6 +36,10 @@ VersionInfoDescription=Win Solar Setup
 [Files]
 Source: "..\publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
+[InstallDelete]
+; Left by the Win Solar 2 portable build: points into a deleted %TEMP% folder and shows a blank icon in Start.
+Type: files; Name: "{userprograms}\WinSolar.lnk"
+
 [Icons]
 Name: "{userprograms}\Win Solar"; Filename: "{app}\WinSolar.exe"
 
@@ -77,12 +81,12 @@ begin
   end;
 end;
 
-{ Win Solar 2 was an Electron app: find its uninstaller (per-user or per-machine). }
-function FindV2(RootKey: Integer; var Command: String): Boolean;
+{ Win Solar 2 was an Electron app (NSIS uninstaller): find it, per-user or per-machine. }
+function FindV2(RootKey: Integer; var KeyPath, Uninstaller, Args: String): Boolean;
 var
   Keys: TArrayOfString;
-  I: Integer;
-  Path, Name, Ver: String;
+  I, Q: Integer;
+  Path, Name, Ver, Command: String;
 begin
   Result := False;
   if not RegGetSubkeyNames(RootKey, UninstallRoot, Keys) then Exit;
@@ -90,12 +94,26 @@ begin
   begin
     Path := UninstallRoot + '\' + Keys[I];
     if RegQueryStringValue(RootKey, Path, 'DisplayName', Name) and (Pos('Win Solar', Name) = 1) and
-       RegQueryStringValue(RootKey, Path, 'DisplayVersion', Ver) and (Pos('2.', Ver) = 1) then
+       RegQueryStringValue(RootKey, Path, 'DisplayVersion', Ver) and (Pos('2.', Ver) = 1) and
+       RegQueryStringValue(RootKey, Path, 'UninstallString', Command) then
     begin
-      if not RegQueryStringValue(RootKey, Path, 'QuietUninstallString', Command) then
-        if RegQueryStringValue(RootKey, Path, 'UninstallString', Command) then
-          Command := Command + ' /S';
-      Result := Command <> '';
+      { "C:\...\Uninstall Win Solar.exe" /currentuser  ->  exe path + arguments }
+      Command := Trim(Command);
+      if Copy(Command, 1, 1) = '"' then
+      begin
+        Delete(Command, 1, 1);
+        Q := Pos('"', Command);
+        if Q = 0 then Exit;
+        Uninstaller := Copy(Command, 1, Q - 1);
+        Args := Trim(Copy(Command, Q + 1, Length(Command)));
+      end
+      else
+      begin
+        Uninstaller := Command;
+        Args := '';
+      end;
+      KeyPath := Path;
+      Result := FileExists(Uninstaller);
       Exit;
     end;
   end;
@@ -103,23 +121,41 @@ end;
 
 procedure RemoveV2;
 var
-  Command: String;
-  ResultCode: Integer;
-  Found: Boolean;
+  RootKey, ResultCode, Waited: Integer;
+  KeyPath, Uninstaller, Args, Dir: String;
 begin
-  Found := FindV2(HKEY_CURRENT_USER, Command);
-  if not Found then Found := FindV2(HKEY_LOCAL_MACHINE, Command);
-  if not Found then Exit;
+  RootKey := HKEY_CURRENT_USER;
+  if not FindV2(RootKey, KeyPath, Uninstaller, Args) then
+  begin
+    RootKey := HKEY_LOCAL_MACHINE;
+    if not FindV2(RootKey, KeyPath, Uninstaller, Args) then Exit;
+  end;
 
-  if MsgBox('Win Solar 2 is installed. Remove it now?' + #13#10 + #13#10 +
+  if SuppressibleMsgBox('Win Solar 2 is installed. Remove it now?' + #13#10 + #13#10 +
             'Win Solar 3 replaces it. Running both would make them fight over the theme.',
-            mbConfirmation, MB_YESNO) <> IDYES then Exit;
+            mbConfirmation, MB_YESNO, IDYES) <> IDYES then Exit;
 
   Exec(ExpandConstant('{sys}\taskkill.exe'), '/IM "Win Solar.exe" /F', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   RegDeleteValue(HKEY_CURRENT_USER, RunKey, 'electron.app.Win Solar');
   RegDeleteValue(HKEY_CURRENT_USER, RunKey, 'com.winsolar.app');
   RegDeleteValue(HKEY_CURRENT_USER, RunKey, 'Win Solar');
-  Exec(ExpandConstant('{cmd}'), '/C "' + Command + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+
+  { An NSIS uninstaller copies itself to %TEMP%, starts that copy and returns at once. The copy then deletes
+    "Programs\Win Solar" and the "Win Solar" Start shortcut - the same folder and shortcut Win Solar 3 uses - while
+    or after we install, which broke the 3.0.0 install. "_?=<folder>" makes it run in place and finish first. }
+  Dir := ExtractFileDir(Uninstaller);
+  Exec(Uninstaller, Trim(Args + ' /S') + ' _?=' + Dir, Dir, SW_HIDE, ewWaitUntilTerminated, ResultCode);
+
+  { Belt and braces: wait (up to 60 s) until its uninstall entry is gone. }
+  Waited := 0;
+  while RegKeyExists(RootKey, KeyPath) and (Waited < 60000) do
+  begin
+    Sleep(250);
+    Waited := Waited + 250;
+  end;
+
+  { Run in place, the uninstaller cannot delete itself. }
+  DeleteFile(Uninstaller);
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
