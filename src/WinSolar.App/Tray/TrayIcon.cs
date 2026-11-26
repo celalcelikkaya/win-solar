@@ -5,6 +5,7 @@ using System.Windows.Interop;
 using System.Windows.Threading;
 using WinSolar.App.Interop;
 using WinSolar.App.Services;
+using WinSolar.App.Styling;
 using WinSolar.Core.Decisions;
 using WinSolar.Core.Engine;
 using WinSolar.Core.Presentation;
@@ -120,6 +121,17 @@ public sealed class TrayIcon : IDisposable
             sep.SetResourceReference(FrameworkElement.StyleProperty, "TrayMenuSeparator");
             return sep;
         }
+
+        // Title row with the Win Solar mark (not clickable).
+        var titleRow = new StackPanel { Orientation = Orientation.Horizontal };
+        var logo = Ui.Logo(18);
+        logo.Margin = new Thickness(-24, 0, 6, 0); // sits in the check-mark column, so the name lines up with the items
+        titleRow.Children.Add(logo);
+        titleRow.Children.Add(new TextBlock { Text = "Win Solar", FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
+        var title = new MenuItem { Header = titleRow, IsHitTestVisible = false, Focusable = false };
+        title.SetResourceReference(FrameworkElement.StyleProperty, "TrayMenuItem");
+        menu.Items.Add(title);
+        menu.Items.Add(Line());
 
         var mode = s?.Mode ?? Mode.Auto;
         menu.Items.Add(Item("Auto (sunrise and sunset)", () => engine.SetMode(Mode.Auto), mode == Mode.Auto));

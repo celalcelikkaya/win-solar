@@ -85,9 +85,8 @@ public static class SettingsSheet
             Row("24-hour clock", null, Switch(!s.Hour12, v => ctx.Change(x => x with { Hour12 = !v })))));
 
         var version = typeof(SettingsSheet).Assembly.GetName().Version;
-        var logo = new Grid { Width = 40, Height = 40 };
-        logo.Children.Add(new Border { CornerRadius = new CornerRadius(10), Background = new System.Windows.Media.LinearGradientBrush(
-            System.Windows.Media.Color.FromRgb(0xFF, 0xCF, 0x5C), System.Windows.Media.Color.FromRgb(0x2A, 0x3A, 0x7C), 45) });
+        var logo = Ui.Logo(40);
+        logo.VerticalAlignment = VerticalAlignment.Center;
         var aboutText = Ui.Row(Orientation.Vertical, 0,
             Ui.Text($"Win Solar {version?.ToString(3)}", 13, FontWeights.SemiBold),
             Ui.Text("Celal Çelikkaya", 12, null, "Ink2"));

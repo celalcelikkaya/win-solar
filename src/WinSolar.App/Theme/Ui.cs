@@ -55,6 +55,27 @@ public static class Icons
 /// <summary>Small factory helpers so code-built views read like markup.</summary>
 public static class Ui
 {
+    private static System.Windows.Media.Imaging.BitmapFrame[]? logoFrames;
+
+    /// <summary>The Win Solar mark (from the app icon), using the icon frame that fits the size on this screen.</summary>
+    public static FrameworkElement Logo(double size)
+    {
+        logoFrames ??= System.Windows.Media.Imaging.BitmapDecoder.Create(
+                new Uri("pack://application:,,,/WinSolar;component/Assets/icon.ico", UriKind.Absolute),
+                System.Windows.Media.Imaging.BitmapCreateOptions.None,
+                System.Windows.Media.Imaging.BitmapCacheOption.OnLoad)
+            .Frames.OrderBy(f => f.PixelWidth).ToArray();
+        var image = new Image { Width = size, Height = size, Stretch = Stretch.Uniform, SnapsToDevicePixels = true };
+        RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.HighQuality);
+        image.Loaded += (_, _) =>
+        {
+            var pixels = size * VisualTreeHelper.GetDpi(image).DpiScaleX;
+            image.Source = logoFrames.FirstOrDefault(f => f.PixelWidth >= pixels) ?? logoFrames[^1];
+        };
+        image.Source = logoFrames[^1];
+        return image;
+    }
+
     public static FrameworkElement Icon(Geometry data, double size = 16, string brushKey = "Ink2")
     {
         var path = new Path
