@@ -1,3 +1,9 @@
 node_modules
 dist
 release
+bin/
+obj/
+.vs/
+*.user
+TestResults/
+.superpowers/
