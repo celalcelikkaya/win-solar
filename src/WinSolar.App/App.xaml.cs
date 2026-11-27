@@ -98,7 +98,16 @@ public partial class App : Application
         listener.Start();
 
         engineHost.Start();
-        if (!e.Args.Contains("--minimized", StringComparer.OrdinalIgnoreCase)) window.ShowFlyout();
+        if (store.IsFirstRun || e.Args.Contains("--welcome", StringComparer.OrdinalIgnoreCase))
+        {
+            store.UpdateSettings(x => x); // saved now, so the welcome shows once
+            window.ShowFlyout();
+            window.OpenSheet("Welcome to Win Solar", body => WelcomeSheet.Build(body, window.Context));
+        }
+        else if (!e.Args.Contains("--minimized", StringComparer.OrdinalIgnoreCase))
+        {
+            window.ShowFlyout();
+        }
     }
 
     private bool UnregisterShortcut()

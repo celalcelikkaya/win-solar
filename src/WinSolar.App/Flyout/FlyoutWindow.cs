@@ -300,7 +300,10 @@ public sealed class FlyoutWindow : Window
         };
     }
 
-    private bool Pinned => !host.Store.Settings.HideOnClickOutside;
+    /// <summary>True while a dialog of the flyout is open (a file picker), so losing focus does not hide it.</summary>
+    public bool KeepOpen { get; set; }
+
+    private bool Pinned => KeepOpen || !host.Store.Settings.HideOnClickOutside;
 
     /// <summary>Everything the sheets need.</summary>
     public SheetContext Context { get; set; } = null!;

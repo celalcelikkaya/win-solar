@@ -16,11 +16,15 @@ public sealed class AppStateStore : IStateStore
     {
         var folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Win Solar");
         files = new JsonFileStore(folder);
+        IsFirstRun = !File.Exists(Path.Combine(folder, SettingsFile));
         Settings = files.Load(SettingsFile, () => new AppSettings());
         State = files.Load(StateFile, () => new AppState());
     }
 
     public string Folder => files.Folder;
+
+    /// <summary>No settings file existed at start: Win Solar runs for the first time (the welcome sheet shows).</summary>
+    public bool IsFirstRun { get; }
 
     public AppSettings Settings { get; private set; }
 
