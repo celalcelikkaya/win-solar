@@ -28,11 +28,11 @@ public sealed class SwitchOverlay
     private const double BandShare = 0.12;
     private const int WmDpiChanged = 0x02E0;
 
-    private sealed record Screen(Window Main, Window Band, Canvas BandPicture, Native.Rect Bounds)
+    /// <summary>One monitor: the frozen picture's window, the soft band (a bare layered window we draw ourselves),
+    /// and the frozen pixels the band is made from.</summary>
+    private sealed record Screen(Window Main, HwndSource Band, Native.LayeredStrip Strip, int[] Pixels, int[] BandPixels, Native.Rect Bounds)
     {
         public IntPtr MainHwnd => new WindowInteropHelper(Main).Handle;
-
-        public IntPtr BandHwnd => new WindowInteropHelper(Band).Handle;
 
         public int Width => Bounds.Right - Bounds.Left;
 
@@ -110,25 +110,32 @@ public sealed class SwitchOverlay
         foreach (var bounds in monitors)
         {
             var picture = Capture(bounds);
-            var main = NewWindow(new Image { Source = picture, Stretch = Stretch.Fill }, Brushes.Black, transparent: false);
-            var bandPicture = new Canvas
+            var width = bounds.Right - bounds.Left;
+            var height = bounds.Bottom - bounds.Top;
+            var pixels = new int[width * height];
+            picture.CopyPixels(pixels, width * 4, 0);
+            var bandHeight = Math.Max(2, (int)Math.Round(height * BandShare));
+            var main = NewWindow(new Image { Source = picture, Stretch = Stretch.Fill });
+
+            // The band is a bare window (no WPF content): its pixels and position change together in one call.
+            var band = new HwndSource(new HwndSourceParameters("WinSolarBand")
             {
-                // Soft edge: transparent at the top of the band, opaque at its bottom.
-                OpacityMask = new LinearGradientBrush(Colors.Transparent, Colors.Black, 90),
-                ClipToBounds = true,
-            };
-            bandPicture.Children.Add(new Image { Source = picture, Stretch = Stretch.Fill });
-            var band = NewWindow(bandPicture, Brushes.Transparent, transparent: true);
-            var screen = new Screen(main, band, bandPicture, bounds);
+                WindowStyle = Native.BandStyle,
+                ExtendedWindowStyle = Native.BandExStyle,
+                PositionX = bounds.Left,
+                PositionY = bounds.Top - bandHeight,
+                Width = width,
+                Height = bandHeight,
+            });
+            Native.ExcludeFromCapture(band.Handle);
+            var strip = new Native.LayeredStrip(band.Handle, width, bandHeight);
+            var screen = new Screen(main, band, strip, pixels, new int[width * bandHeight], bounds);
             screens.Add(screen);
 
             main.SourceInitialized += (_, _) => Native.MakeOverlay(screen.MainHwnd, bounds);
             main.Show();
             Native.MakeOverlay(screen.MainHwnd, bounds); // again: WPF may move it on show
-            band.SourceInitialized += (_, _) => Native.MakeOverlayBand(screen.BandHwnd);
-            band.Show();
-            Native.PlaceWindow(screen.BandHwnd, bounds.Left, bounds.Top - BandHeight(screen), screen.Width, BandHeight(screen));
-            Native.MakeOverlayBand(screen.BandHwnd);
+            Native.BringToTop(band.Handle);
         }
 
         // Let WPF render the frozen pictures and DWM put them on screen before anything changes below.
@@ -137,17 +144,16 @@ public sealed class SwitchOverlay
         Native.DwmFlush();
     }
 
-    private static Window NewWindow(UIElement content, Brush background, bool transparent)
+    private static Window NewWindow(UIElement content)
     {
         var window = new Window
         {
             WindowStyle = WindowStyle.None,
-            AllowsTransparency = transparent,
             ResizeMode = ResizeMode.NoResize,
             ShowInTaskbar = false,
             ShowActivated = false,
             Topmost = true,
-            Background = background,
+            Background = Brushes.Black,
             Left = -32000,
             Top = -32000,
             Width = 1,
@@ -166,7 +172,39 @@ public sealed class SwitchOverlay
         return window;
     }
 
-    private static int BandHeight(Screen s) => (int)Math.Round(s.Height * BandShare);
+    private static int BandHeight(Screen s) => s.BandPixels.Length / s.Width;
+
+    /// <summary>
+    /// The band's pixels for an edge at <paramref name="edge"/>: the frozen picture under the band, premultiplied by an
+    /// alpha that rises smoothly from 0 at the edge to 1 where the uncut picture starts.
+    /// </summary>
+    private static void PaintBand(Screen s, int edge)
+    {
+        var band = BandHeight(s);
+        var w = s.Width;
+        for (var i = 0; i < band; i++)
+        {
+            var y = edge + i;
+            var row = i * w;
+            if (y < 0 || y >= s.Height)
+            {
+                Array.Clear(s.BandPixels, row, w);
+                continue;
+            }
+
+            var f = (i + 0.5) / band;
+            var a = (int)Math.Round(255 * f * f * (3 - 2 * f)); // smoothstep
+            var src = y * w;
+            for (var x = 0; x < w; x++)
+            {
+                var c = s.Pixels[src + x];
+                var r = ((c >> 16) & 0xFF) * a / 255;
+                var g = ((c >> 8) & 0xFF) * a / 255;
+                var b = (c & 0xFF) * a / 255;
+                s.BandPixels[row + x] = (a << 24) | (r << 16) | (g << 8) | b;
+            }
+        }
+    }
 
     /// <summary>
     /// Give Windows a moment so most of the screen has its new look before the edge passes: look about every 100 ms
@@ -194,8 +232,6 @@ public sealed class SwitchOverlay
         StopTimers(keepWatchdog: true);
         Log.Write($"Switch animation: started after {(DateTime.UtcNow - appliedAt).TotalMilliseconds:0} ms");
         playing = animation;
-        if (animation == SwitchAnimation.Fade)
-            foreach (var s in screens) s.Band.Visibility = Visibility.Hidden;
         startedAt = null;
         frames = 0;
         CompositionTarget.Rendering += Step;
@@ -223,14 +259,9 @@ public sealed class SwitchOverlay
             // The edge travels from above the screen to below it: live screen above, soft band, frozen picture below.
             var band = BandHeight(s);
             var edge = (int)Math.Round(-band + p * (s.Height + band));
+            PaintBand(s, edge);
+            s.Strip.Show(s.BandPixels, s.Bounds.Left, s.Bounds.Top + edge);
             Native.ClipWindow(s.MainHwnd, 0, Math.Clamp(edge + band, 0, s.Height), s.Width, s.Height);
-            Native.PlaceWindow(s.BandHwnd, s.Bounds.Left, s.Bounds.Top + edge, s.Width, band);
-            // The band shows the part of the frozen picture under it; WPF lays it out in DIPs of the band window's DPI.
-            var dpi = VisualTreeHelper.GetDpi(s.Band);
-            var image = (Image)s.BandPicture.Children[0];
-            image.Width = s.Width / dpi.DpiScaleX;
-            image.Height = s.Height / dpi.DpiScaleY;
-            Canvas.SetTop(image, -edge / dpi.DpiScaleY);
         }
 
         if (t < 1) return;
@@ -246,7 +277,8 @@ public sealed class SwitchOverlay
         CompositionTarget.Rendering -= Step;
         foreach (var s in screens)
         {
-            s.Band.Close();
+            s.Strip.Dispose();
+            s.Band.Dispose();
             s.Main.Close();
         }
 

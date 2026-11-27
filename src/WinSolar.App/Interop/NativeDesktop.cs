@@ -224,17 +224,68 @@ internal static partial class Native
     public static void ClipWindow(IntPtr hwnd, int left, int top, int right, int bottom) =>
         SetWindowRgn(hwnd, CreateRectRgn(left, top, right, bottom), true);
 
-    /// <summary>Moves and sizes a window in physical pixels without touching its z-order or focus.</summary>
-    public static void PlaceWindow(IntPtr hwnd, int x, int y, int width, int height) =>
-        SetWindowPos(hwnd, IntPtr.Zero, x, y, width, height, SwpNoZOrder | SwpNoActivate);
+    // --- the soft band: our own premultiplied pixels, moved and redrawn in one call so they never drift apart ---
+    public const int BandExStyle = 0x00080000 /* LAYERED */ | 0x20 /* TRANSPARENT */ | 0x8 /* TOPMOST */ | 0x80 /* TOOLWINDOW */ | 0x08000000 /* NOACTIVATE */;
+    public const int BandStyle = unchecked((int)0x80000000) /* POPUP */ | 0x10000000 /* VISIBLE */;
 
-    /// <summary>Click-through and never focused for a per-pixel transparent WPF window (no SetLayeredWindowAttributes:
-    /// it would break WPF's own layered drawing), topmost and hidden from capture.</summary>
-    public static void MakeOverlayBand(IntPtr hwnd)
-    {
-        var style = GetWindowLongPtr(hwnd, GwlExStyle).ToInt64();
-        SetWindowLongPtr(hwnd, GwlExStyle, new IntPtr(style | WsExTransparent | WsExNoActivate | WsExToolWindow));
-        SetWindowDisplayAffinity(hwnd, WdaExcludeFromCapture);
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Point32 { public int X, Y; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Size32 { public int Cx, Cy; }
+
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    private struct BlendFunction { public byte Op, Flags, Alpha, Format; }
+
+    [DllImport("gdi32.dll")]
+    private static extern IntPtr CreateDIBSection(IntPtr dc, ref BitmapInfoHeader info, uint usage, out IntPtr bits, IntPtr section, uint offset);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool UpdateLayeredWindow(IntPtr hwnd, IntPtr dcDst, ref Point32 dst, ref Size32 size, IntPtr dcSrc, ref Point32 src, uint key, ref BlendFunction blend, uint flags);
+
+    public static void ExcludeFromCapture(IntPtr hwnd) => SetWindowDisplayAffinity(hwnd, WdaExcludeFromCapture);
+
+    /// <summary>Puts a window at the top of the topmost band (the soft band must sit above the frozen picture).</summary>
+    public static void BringToTop(IntPtr hwnd) =>
         SetWindowPos(hwnd, HwndTopmost, 0, 0, 0, 0, SwpNoSize | 0x0002 /* SWP_NOMOVE */ | SwpNoActivate);
+
+    /// <summary>A width x height premultiplied BGRA surface shown in a layered window at a given screen position.</summary>
+    public sealed class LayeredStrip : IDisposable
+    {
+        private readonly IntPtr hwnd, dc, dib, old, bits;
+        private readonly int width, height;
+
+        public LayeredStrip(IntPtr hwnd, int width, int height)
+        {
+            this.hwnd = hwnd;
+            this.width = width;
+            this.height = height;
+            var screen = GetDC(IntPtr.Zero);
+            dc = CreateCompatibleDC(screen);
+            ReleaseDC(IntPtr.Zero, screen);
+            var info = new BitmapInfoHeader { Size = Marshal.SizeOf<BitmapInfoHeader>(), Width = width, Height = -height, Planes = 1, BitCount = 32 };
+            dib = CreateDIBSection(dc, ref info, 0, out bits, IntPtr.Zero, 0);
+            if (dc == IntPtr.Zero || dib == IntPtr.Zero) throw new System.ComponentModel.Win32Exception("Out of GDI memory");
+            old = SelectObject(dc, dib);
+        }
+
+        /// <summary>Copies <paramref name="pixels"/> in and puts the strip at (x, y) in the same call.</summary>
+        public void Show(int[] pixels, int x, int y)
+        {
+            Marshal.Copy(pixels, 0, bits, width * height);
+            var dst = new Point32 { X = x, Y = y };
+            var size = new Size32 { Cx = width, Cy = height };
+            var src = new Point32();
+            var blend = new BlendFunction { Op = 0, Flags = 0, Alpha = 255, Format = 1 /* AC_SRC_ALPHA */ };
+            UpdateLayeredWindow(hwnd, IntPtr.Zero, ref dst, ref size, dc, ref src, 0, ref blend, 2 /* ULW_ALPHA */);
+        }
+
+        public void Dispose()
+        {
+            SelectObject(dc, old);
+            DeleteObject(dib);
+            DeleteDC(dc);
+        }
     }
 }
