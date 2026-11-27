@@ -1,6 +1,7 @@
 using Microsoft.Win32;
 using WinSolar.App.Interop;
 using WinSolar.App.Overlay;
+using WinSolar.App.Wallpapers;
 using WinSolar.Core.Desktop;
 using WinSolar.Core.Engine;
 using WinSolar.Core.Settings;
@@ -14,10 +15,12 @@ public sealed class SystemClock : IClock
 }
 
 /// <summary>
-/// Apps, taskbar and Start theme and the profile (accent, pointer, sounds), then one broadcast; the switch
+/// Apps, taskbar and Start theme, the profile (accent, pointer, sounds) and the wallpaper, then one broadcast; the switch
 /// itself runs behind <see cref="SwitchOverlay"/>. Writes only what changed. Outside changes are read from the apps theme.
 /// </summary>
-public sealed class WindowsTheme(Func<AppSettings> settings, DesktopProfile profile, SwitchOverlay overlay, IFullScreenProbe fullScreen) : IThemeApplier
+public sealed class WindowsTheme(
+    Func<AppSettings> settings, DesktopProfile profile, WallpaperService wallpaper, SwitchOverlay overlay, IFullScreenProbe fullScreen)
+    : IThemeApplier
 {
     private const string KeyPath = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
 
@@ -45,6 +48,7 @@ public sealed class WindowsTheme(Func<AppSettings> settings, DesktopProfile prof
         }
 
         changed |= profile.Apply(look);
+        wallpaper.Update(theme); // behind the overlay too, so a theme-following picture rolls in with the theme
 
         // The broadcast can wait on slow windows; never block the UI thread for it.
         if (changed) _ = Task.Run(() => Native.BroadcastSettingChange("ImmersiveColorSet"));

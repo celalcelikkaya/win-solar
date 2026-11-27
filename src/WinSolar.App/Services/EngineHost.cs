@@ -26,8 +26,10 @@ public sealed class EngineHost : IDisposable
         Light = new LightSensorService(dispatcher, Learned, () => store.Settings.Place ?? engine?.FallbackPlace ?? firstGuess);
         Weather = new WeatherService(dispatcher);
         Desktop = new DesktopProfile(store.Folder);
+        Wallpaper = new Wallpapers.WallpaperService(store.Folder, () => store.Settings,
+            () => store.Settings.Place ?? engine?.FallbackPlace ?? firstGuess, dispatcher);
         var fullScreen = new FullScreenProbe();
-        Theme = new WindowsTheme(() => store.Settings, Desktop, new Overlay.SwitchOverlay(), fullScreen);
+        Theme = new WindowsTheme(() => store.Settings, Desktop, Wallpaper, new Overlay.SwitchOverlay(), fullScreen);
         Engine = engine = new SolarEngine(new SystemClock(), Theme, notifier, fullScreen, store, firstGuess,
             Power, Light, Weather);
         Engine.Changed += OnChanged;
@@ -61,6 +63,8 @@ public sealed class EngineHost : IDisposable
 
     public WindowsTheme Theme { get; }
 
+    public Wallpapers.WallpaperService Wallpaper { get; }
+
     public EngineSnapshot? Last { get; private set; }
 
     public event Action<EngineSnapshot>? Changed;
@@ -69,6 +73,7 @@ public sealed class EngineHost : IDisposable
 
     public void Start()
     {
+        Wallpaper.Importer.CleanUp();
         Engine.Start();
         started = true; // ticks that arrive while the first switch is painted are dropped; the engine re-checks later
         RefreshLook(); // a profile setting may not match yet (first run, or changed while Win Solar was closed)
@@ -103,6 +108,7 @@ public sealed class EngineHost : IDisposable
         timer.Start();
         fullScreenPoll.IsEnabled = snapshot.WaitingForFullScreen;
         Weather.Use(snapshot.Light.Source is LightSource.Weather or LightSource.WeatherUnavailable, snapshot.Place);
+        Wallpaper.Update(snapshot.Applied);
         Changed?.Invoke(snapshot);
     }
 
@@ -147,5 +153,6 @@ public sealed class EngineHost : IDisposable
         Power.Dispose();
         Light.Dispose();
         Weather.Dispose();
+        Wallpaper.Dispose();
     }
 }

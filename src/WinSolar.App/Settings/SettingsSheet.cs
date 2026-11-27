@@ -37,6 +37,9 @@ public sealed class SheetContext
         var after = Host.Store.Settings;
         // Only a profile change re-applies the look, so an unrelated setting never undoes the user's own Windows choice.
         if (before.Day != after.Day || before.Night != after.Night || before.ProfilesFollow != after.ProfilesFollow) Host.RefreshLook();
+        if (before.Wallpaper != after.Wallpaper || before.ActiveSet != after.ActiveSet
+            || before.Day.Wallpaper != after.Day.Wallpaper || before.Night.Wallpaper != after.Night.Wallpaper)
+            Host.Wallpaper.Refresh();
         Host.Tick();
         if (rebuild) Flyout.RebuildSheet(body => SettingsSheet.Build(body, this));
     }

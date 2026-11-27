@@ -2,6 +2,7 @@ using WinSolar.Core.Decisions;
 using WinSolar.Core.Desktop;
 using WinSolar.Core.Power;
 using WinSolar.Core.Scheduling;
+using WinSolar.Core.Wallpaper;
 
 namespace WinSolar.Core.Settings;
 
@@ -35,6 +36,12 @@ public sealed record AppSettings
 
     /// <summary>"Pointer and sounds follow the profile"; off keeps the Day profile's pointer and sounds.</summary>
     public bool ProfilesFollow { get; init; } = true;
+
+    // Plan 4
+    public WallpaperMode Wallpaper { get; init; } = WallpaperMode.Sun;
+
+    /// <summary>Folder name of the imported set shown in sun mode; null until one is imported.</summary>
+    public string? ActiveSet { get; init; }
 
     public int Schema { get; init; } = 3;
 

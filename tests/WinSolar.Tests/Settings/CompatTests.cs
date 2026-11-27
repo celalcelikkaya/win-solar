@@ -2,6 +2,7 @@ using WinSolar.Core.Desktop;
 using WinSolar.Core.Scheduling;
 using WinSolar.Core.Power;
 using WinSolar.Core.Settings;
+using WinSolar.Core.Wallpaper;
 
 namespace WinSolar.Tests.Settings;
 
@@ -41,5 +42,19 @@ public class CompatTests
         Assert.Equal(new Profile("#0067c0", Pointer.White, Sounds.Normal), s.Day);
         Assert.Equal(new Profile("#6b69d6", Pointer.Black, Sounds.Normal), s.Night);
         Assert.True(s.ProfilesFollow);
+    }
+
+    [Fact]
+    public void Plan_3_settings_get_wallpaper_defaults()
+    {
+        var dir = Directory.CreateTempSubdirectory().FullName;
+        File.WriteAllText(Path.Combine(dir, "settings.json"),
+            """{ "Animation": "Fade", "Day": { "Accent": "#0f7b0f", "Pointer": "White", "Sounds": "Normal" }, "Schema": 3 }""");
+        var s = new JsonFileStore(dir).Load("settings.json", () => new AppSettings());
+        Assert.Equal(SwitchAnimation.Fade, s.Animation);
+        Assert.Equal("#0f7b0f", s.Day.Accent);
+        Assert.Null(s.Day.Wallpaper);
+        Assert.Equal(WallpaperMode.Sun, s.Wallpaper);
+        Assert.Null(s.ActiveSet);
     }
 }
