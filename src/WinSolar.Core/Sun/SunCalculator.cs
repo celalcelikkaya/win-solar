@@ -40,6 +40,21 @@ public static class SunCalculator
     /// <summary>Sun elevation in degrees at an instant (SunCalc model, as in the demo).</summary>
     public static double Elevation(DateTimeOffset at, double lat, double lng)
     {
+        var (dec, h, latR) = Position(at, lat, lng);
+        return Math.Asin(Math.Sin(latR) * Math.Sin(dec) + Math.Cos(latR) * Math.Cos(dec) * Math.Cos(h)) / Rad;
+    }
+
+    /// <summary>Sun azimuth in degrees at an instant, from north, clockwise (90 = east, 180 = south).</summary>
+    public static double Azimuth(DateTimeOffset at, double lat, double lng)
+    {
+        var (dec, h, latR) = Position(at, lat, lng);
+        var fromSouth = Math.Atan2(Math.Sin(h), Math.Cos(h) * Math.Sin(latR) - Math.Tan(dec) * Math.Cos(latR));
+        return Mod(fromSouth / Rad + 180, 360);
+    }
+
+    /// <summary>Declination, local hour angle and latitude, in radians.</summary>
+    private static (double Dec, double HourAngle, double Lat) Position(DateTimeOffset at, double lat, double lng)
+    {
         var d = at.ToUnixTimeMilliseconds() / MsPerDay + JdUnixEpoch - J2000;
         var m = Mod(357.5291 + 0.98560028 * d, 360) * Rad;
         var c = (1.9148 * Math.Sin(m) + 0.02 * Math.Sin(2 * m) + 0.0003 * Math.Sin(3 * m)) * Rad;
@@ -48,7 +63,6 @@ public static class SunCalculator
         var dec = Math.Asin(Math.Sin(l) * Math.Sin(e));
         var ra = Math.Atan2(Math.Sin(l) * Math.Cos(e), Math.Cos(l));
         var h = (280.16 + 360.9856235 * d) * Rad + lng * Rad - ra;
-        var latR = lat * Rad;
-        return Math.Asin(Math.Sin(latR) * Math.Sin(dec) + Math.Cos(latR) * Math.Cos(dec) * Math.Cos(h)) / Rad;
+        return (dec, h, lat * Rad);
     }
 }
