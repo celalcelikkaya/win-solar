@@ -28,6 +28,7 @@ public sealed class EngineHost : IDisposable
         Desktop = new DesktopProfile(store.Folder);
         Wallpaper = new Wallpapers.WallpaperService(store.Folder, () => store.Settings,
             () => store.Settings.Place ?? engine?.FallbackPlace ?? firstGuess, dispatcher);
+        Updates = new UpdateService(dispatcher);
         var fullScreen = new FullScreenProbe();
         Theme = new WindowsTheme(() => store.Settings, Desktop, Wallpaper, new Overlay.SwitchOverlay(), fullScreen);
         Engine = engine = new SolarEngine(new SystemClock(), Theme, notifier, fullScreen, store, firstGuess,
@@ -65,6 +66,8 @@ public sealed class EngineHost : IDisposable
 
     public Wallpapers.WallpaperService Wallpaper { get; }
 
+    public UpdateService Updates { get; }
+
     public EngineSnapshot? Last { get; private set; }
 
     public event Action<EngineSnapshot>? Changed;
@@ -77,6 +80,7 @@ public sealed class EngineHost : IDisposable
         Wallpaper.InstallBuiltIn();
         Engine.Start();
         started = true; // ticks that arrive while the first switch is painted are dropped; the engine re-checks later
+        Updates.Start();
         RefreshLook(); // a profile setting may not match yet (first run, or changed while Win Solar was closed)
     }
 
@@ -155,5 +159,6 @@ public sealed class EngineHost : IDisposable
         Light.Dispose();
         Weather.Dispose();
         Wallpaper.Dispose();
+        Updates.Dispose();
     }
 }

@@ -49,6 +49,8 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 
 [Run]
 Filename: "{app}\WinSolar.exe"; Description: "Start Win Solar"; Flags: nowait postinstall skipifsilent
+; In-app updates run this setup silently with /UPDATE=1: start Win Solar again afterwards.
+Filename: "{app}\WinSolar.exe"; Parameters: "--minimized"; Flags: nowait; Check: IsUpdate
 
 [UninstallRun]
 Filename: "{sys}\taskkill.exe"; Parameters: "/IM WinSolar.exe /F"; Flags: runhidden; RunOnceId: "StopWinSolar"
@@ -57,6 +59,11 @@ Filename: "{sys}\taskkill.exe"; Parameters: "/IM WinSolar.exe /F"; Flags: runhid
 const
   UninstallRoot = 'Software\Microsoft\Windows\CurrentVersion\Uninstall';
   RunKey = 'Software\Microsoft\Windows\CurrentVersion\Run';
+
+function IsUpdate: Boolean;
+begin
+  Result := ExpandConstant('{param:UPDATE|0}') = '1';
+end;
 
 function DesktopRuntime8Installed: Boolean;
 var

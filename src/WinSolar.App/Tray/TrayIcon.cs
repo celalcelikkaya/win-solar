@@ -145,6 +145,8 @@ public sealed class TrayIcon : IDisposable
         menu.Items.Add(Line());
         menu.Items.Add(Item("Open Win Solar", toggleFlyout));
         menu.Items.Add(Item("Settings", openSettings));
+        if (host.Updates.Available is { } update && host.Updates.State == UpdateState.Available)
+            menu.Items.Add(Item($"Restart to update ({update.Version.ToString(3)})", () => _ = host.Updates.InstallAsync(quit)));
         menu.Items.Add(Item("Quit", quit));
 
         // A tray menu only closes on outside clicks when its window is in the foreground.
