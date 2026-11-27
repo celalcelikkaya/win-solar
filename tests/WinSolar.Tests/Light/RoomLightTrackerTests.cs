@@ -17,13 +17,13 @@ public class RoomLightTrackerTests
     }
 
     [Fact]
-    public void Dark_counts_after_one_minute()
+    public void Dark_counts_after_15_seconds()
     {
         var r = new RoomLightTracker(Th);
         r.Feed(T0, 40);
-        Assert.Null(r.Stable(T0.AddSeconds(59)));
-        Assert.Equal((Theme.Dark, T0.AddMinutes(1)), r.Pending);
-        Assert.Equal(Theme.Dark, r.Stable(T0.AddMinutes(1)));
+        Assert.Null(r.Stable(T0.AddSeconds(14)));
+        Assert.Equal((Theme.Dark, T0.AddSeconds(15)), r.Pending);
+        Assert.Equal(Theme.Dark, r.Stable(T0.AddSeconds(15)));
         Assert.Null(r.Pending);
         Assert.Equal(40, r.Lux);
     }
@@ -33,7 +33,7 @@ public class RoomLightTrackerTests
     {
         var r = StableAt(Theme.Light);
         r.Feed(T0, 30);
-        r.Feed(T0.AddSeconds(45), 300);
+        r.Feed(T0.AddSeconds(10), 300);
         Assert.Equal(Theme.Light, r.Stable(T0.AddMinutes(5)));
         Assert.Null(r.Pending);
     }
@@ -62,8 +62,8 @@ public class RoomLightTrackerTests
     {
         var r = StableAt(Theme.Light);
         r.Feed(T0, 30);
-        r.Feed(T0.AddSeconds(30), 35);
-        Assert.Equal((Theme.Dark, T0.AddMinutes(1)), r.Pending);
-        Assert.Equal(Theme.Dark, r.Stable(T0.AddMinutes(1)));
+        r.Feed(T0.AddSeconds(8), 35);
+        Assert.Equal((Theme.Dark, T0.AddSeconds(15)), r.Pending);
+        Assert.Equal(Theme.Dark, r.Stable(T0.AddSeconds(15)));
     }
 }

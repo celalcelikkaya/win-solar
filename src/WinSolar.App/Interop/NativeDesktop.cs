@@ -212,4 +212,29 @@ internal static partial class Native
         SetWindowDisplayAffinity(hwnd, WdaExcludeFromCapture);
         SetWindowPos(hwnd, HwndTopmost, r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top, SwpNoActivate | SwpShowWindow);
     }
+
+    // --- roll: the frozen picture is cut away from the top, so the live screen shows above the edge ---
+    [DllImport("gdi32.dll")]
+    private static extern IntPtr CreateRectRgn(int left, int top, int right, int bottom);
+
+    [DllImport("user32.dll")]
+    private static extern int SetWindowRgn(IntPtr hwnd, IntPtr region, [MarshalAs(UnmanagedType.Bool)] bool redraw);
+
+    /// <summary>Limits a window to a rectangle (window coordinates, physical pixels). Windows owns the region afterwards.</summary>
+    public static void ClipWindow(IntPtr hwnd, int left, int top, int right, int bottom) =>
+        SetWindowRgn(hwnd, CreateRectRgn(left, top, right, bottom), true);
+
+    /// <summary>Moves and sizes a window in physical pixels without touching its z-order or focus.</summary>
+    public static void PlaceWindow(IntPtr hwnd, int x, int y, int width, int height) =>
+        SetWindowPos(hwnd, IntPtr.Zero, x, y, width, height, SwpNoZOrder | SwpNoActivate);
+
+    /// <summary>Click-through and never focused for a per-pixel transparent WPF window (no SetLayeredWindowAttributes:
+    /// it would break WPF's own layered drawing), topmost and hidden from capture.</summary>
+    public static void MakeOverlayBand(IntPtr hwnd)
+    {
+        var style = GetWindowLongPtr(hwnd, GwlExStyle).ToInt64();
+        SetWindowLongPtr(hwnd, GwlExStyle, new IntPtr(style | WsExTransparent | WsExNoActivate | WsExToolWindow));
+        SetWindowDisplayAffinity(hwnd, WdaExcludeFromCapture);
+        SetWindowPos(hwnd, HwndTopmost, 0, 0, 0, 0, SwpNoSize | 0x0002 /* SWP_NOMOVE */ | SwpNoActivate);
+    }
 }

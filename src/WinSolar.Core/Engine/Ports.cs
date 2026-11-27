@@ -43,7 +43,7 @@ public interface IPower
     PowerStatus Read();
 }
 
-/// <summary>The ambient light sensor, already smoothed (hysteresis + 1-minute stability).</summary>
+/// <summary>The ambient light sensor, already smoothed (hysteresis + 15-second stability).</summary>
 public interface IRoomLight
 {
     bool Available { get; }

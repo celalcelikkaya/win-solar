@@ -2,7 +2,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Media;
-using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using WinSolar.App.Interop;
@@ -12,33 +11,45 @@ using WinSolar.Core.Desktop;
 namespace WinSolar.App.Overlay;
 
 /// <summary>
-/// Hides Windows' instant theme cut: freezes each monitor's picture in a topmost, click-through window, lets the
-/// theme change underneath, waits until Windows has really repainted (the overlay is excluded from capture) and then
-/// rolls or fades the old picture away. One overlay at a time; it can never stay on screen (one-shot watchdog), and
-/// timers of an overlay that was closed do nothing (each run has its own number).
+/// Hides Windows' instant theme cut. Each monitor's picture is frozen in a topmost, click-through window; the theme
+/// changes underneath; then the frozen picture is taken away so the live screen shows: Roller cuts it from the top
+/// (a window region, cheap) behind a thin soft band (a small per-pixel transparent window), Fade lowers the whole
+/// window's alpha. Whatever repaints late simply appears live. One overlay at a time; a one-shot watchdog closes it,
+/// and timers of a closed run do nothing.
 /// </summary>
 public sealed class SwitchOverlay
 {
     private static readonly TimeSpan Look = TimeSpan.FromMilliseconds(100);
-    private static readonly TimeSpan MinWait = TimeSpan.FromMilliseconds(600);
-    private static readonly TimeSpan GiveUp = TimeSpan.FromSeconds(3);
-    private static readonly TimeSpan CatchUp = TimeSpan.FromMilliseconds(300);
+    private static readonly TimeSpan MinWait = TimeSpan.FromMilliseconds(400);
+    private static readonly TimeSpan GiveUp = TimeSpan.FromSeconds(1.5);
     private static readonly TimeSpan RollTime = TimeSpan.FromSeconds(1.6);
     private static readonly TimeSpan FadeTime = TimeSpan.FromSeconds(1.3);
-    private static readonly TimeSpan Watchdog = TimeSpan.FromSeconds(8);
-    private const double Band = 0.12;
+    private static readonly TimeSpan Watchdog = TimeSpan.FromSeconds(6);
+    private const double BandShare = 0.12;
     private const int WmDpiChanged = 0x02E0;
 
-    private readonly List<(Window Window, Native.Rect Bounds, Image New, Image Old)> screens = [];
+    private sealed record Screen(Window Main, Window Band, Canvas BandPicture, Native.Rect Bounds)
+    {
+        public IntPtr MainHwnd => new WindowInteropHelper(Main).Handle;
+
+        public IntPtr BandHwnd => new WindowInteropHelper(Band).Handle;
+
+        public int Width => Bounds.Right - Bounds.Left;
+
+        public int Height => Bounds.Bottom - Bounds.Top;
+    }
+
+    private readonly List<Screen> screens = [];
     private readonly List<(DispatcherTimer Timer, bool Watchdog)> timers = [];
     private int run;
     private bool freezing;
     private uint[]? oldSample, lastSample;
     private int stableLooks;
     private DateTime appliedAt;
-    private bool counting;
+    private SwitchAnimation playing;
+    private TimeSpan? startedAt;
     private int frames;
-    private TimeSpan firstFrame, lastFrame;
+    private TimeSpan lastFrame;
 
     /// <summary>Runs <paramref name="apply"/> (exactly once) behind the chosen animation; its exceptions reach the caller.</summary>
     public void Run(SwitchAnimation animation, Action apply)
@@ -98,36 +109,26 @@ public sealed class SwitchOverlay
         oldSample = SampleAll(monitors);
         foreach (var bounds in monitors)
         {
-            var oldImage = new Image { Source = Capture(bounds), Stretch = Stretch.Fill };
-            var newImage = new Image { Stretch = Stretch.Fill };
-            var window = new Window
+            var picture = Capture(bounds);
+            var main = NewWindow(new Image { Source = picture, Stretch = Stretch.Fill }, Brushes.Black, transparent: false);
+            var bandPicture = new Canvas
             {
-                WindowStyle = WindowStyle.None,
-                ResizeMode = ResizeMode.NoResize,
-                ShowInTaskbar = false,
-                ShowActivated = false,
-                Topmost = true,
-                Background = Brushes.Black,
-                Left = -32000,
-                Top = -32000,
-                Width = 1,
-                Height = 1,
-                Content = new Grid { Children = { newImage, oldImage } },
+                // Soft edge: transparent at the top of the band, opaque at its bottom.
+                OpacityMask = new LinearGradientBrush(Colors.Transparent, Colors.Black, 90),
+                ClipToBounds = true,
             };
-            window.SourceInitialized += (_, _) =>
-            {
-                var hwnd = new WindowInteropHelper(window).Handle;
-                // Crossing monitors of different DPI must not resize the overlay: it is placed in physical pixels.
-                HwndSource.FromHwnd(hwnd)?.AddHook((IntPtr _, int msg, IntPtr _, IntPtr _, ref bool handled) =>
-                {
-                    if (msg == WmDpiChanged) handled = true;
-                    return IntPtr.Zero;
-                });
-                Native.MakeOverlay(hwnd, bounds);
-            };
-            screens.Add((window, bounds, newImage, oldImage));
-            window.Show();
-            Native.MakeOverlay(new WindowInteropHelper(window).Handle, bounds); // again: WPF may move it on show
+            bandPicture.Children.Add(new Image { Source = picture, Stretch = Stretch.Fill });
+            var band = NewWindow(bandPicture, Brushes.Transparent, transparent: true);
+            var screen = new Screen(main, band, bandPicture, bounds);
+            screens.Add(screen);
+
+            main.SourceInitialized += (_, _) => Native.MakeOverlay(screen.MainHwnd, bounds);
+            main.Show();
+            Native.MakeOverlay(screen.MainHwnd, bounds); // again: WPF may move it on show
+            band.SourceInitialized += (_, _) => Native.MakeOverlayBand(screen.BandHwnd);
+            band.Show();
+            Native.PlaceWindow(screen.BandHwnd, bounds.Left, bounds.Top - BandHeight(screen), screen.Width, BandHeight(screen));
+            Native.MakeOverlayBand(screen.BandHwnd);
         }
 
         // Let WPF render the frozen pictures and DWM put them on screen before anything changes below.
@@ -136,10 +137,41 @@ public sealed class SwitchOverlay
         Native.DwmFlush();
     }
 
+    private static Window NewWindow(UIElement content, Brush background, bool transparent)
+    {
+        var window = new Window
+        {
+            WindowStyle = WindowStyle.None,
+            AllowsTransparency = transparent,
+            ResizeMode = ResizeMode.NoResize,
+            ShowInTaskbar = false,
+            ShowActivated = false,
+            Topmost = true,
+            Background = background,
+            Left = -32000,
+            Top = -32000,
+            Width = 1,
+            Height = 1,
+            Content = content,
+        };
+        window.SourceInitialized += (_, _) =>
+        {
+            // Crossing monitors of different DPI must not resize the overlay: it is placed in physical pixels.
+            HwndSource.FromHwnd(new WindowInteropHelper(window).Handle)?.AddHook((IntPtr _, int msg, IntPtr _, IntPtr _, ref bool handled) =>
+            {
+                if (msg == WmDpiChanged) handled = true;
+                return IntPtr.Zero;
+            });
+        };
+        return window;
+    }
+
+    private static int BandHeight(Screen s) => (int)Math.Round(s.Height * BandShare);
+
     /// <summary>
-    /// Windows repaints at its own pace after a theme change, and some apps (Electron, browsers) much later than the
-    /// taskbar. Look about every 100 ms with a tiny, flicker-free sample of every monitor, and start once the screen
-    /// differs from the frozen picture and three looks in a row agree, no sooner than 0.6 s and no later than 3 s.
+    /// Give Windows a moment so most of the screen has its new look before the edge passes: look about every 100 ms
+    /// with a tiny, flicker-free sample, and start once the screen changed and three looks agree (0.4–1.5 s). Anything
+    /// that repaints later just appears live, since the frozen picture is cut away rather than replaced.
     /// </summary>
     private void WaitForRepaint(SwitchAnimation animation)
     {
@@ -151,7 +183,6 @@ public sealed class SwitchOverlay
             lastSample = sample;
             var waited = DateTime.UtcNow - appliedAt;
             if ((stableLooks < 2 || waited < MinWait) && waited < GiveUp) return;
-            foreach (var s in screens) s.New.Source = Capture(s.Bounds);
         }
         catch (Exception e) when (e is InvalidOperationException or ArgumentException or System.Runtime.InteropServices.ExternalException)
         {
@@ -161,86 +192,50 @@ public sealed class SwitchOverlay
         }
 
         StopTimers(keepWatchdog: true);
-        Log.Write($"Switch animation: screen repainted after {(DateTime.UtcNow - appliedAt).TotalMilliseconds:0} ms");
-        Reveal(animation);
+        Log.Write($"Switch animation: started after {(DateTime.UtcNow - appliedAt).TotalMilliseconds:0} ms");
+        playing = animation;
+        if (animation == SwitchAnimation.Fade)
+            foreach (var s in screens) s.Band.Visibility = Visibility.Hidden;
+        startedAt = null;
+        frames = 0;
+        CompositionTarget.Rendering += Step;
     }
 
-    private void Reveal(SwitchAnimation animation)
+    /// <summary>One frame: move the cut edge (Roller) or lower the alpha (Fade). Closes at the end.</summary>
+    private void Step(object? sender, EventArgs e)
     {
-        var time = animation == SwitchAnimation.Fade ? FadeTime : RollTime;
-        var ease = new CubicEase { EasingMode = EasingMode.EaseInOut };
+        var now = ((RenderingEventArgs)e).RenderingTime;
+        if (now == lastFrame) return;
+        lastFrame = now;
+        startedAt ??= now;
+        frames++;
+        var time = playing == SwitchAnimation.Fade ? FadeTime : RollTime;
+        var t = Math.Min(1, (now - startedAt.Value) / time);
+        var p = t < 0.5 ? 4 * t * t * t : 1 - Math.Pow(-2 * t + 2, 3) / 2; // ease in-out
         foreach (var s in screens)
         {
-            if (animation == SwitchAnimation.Fade)
+            if (playing == SwitchAnimation.Fade)
             {
-                s.Old.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(1, 0, time) { EasingFunction = ease });
+                Native.SetAlpha(s.MainHwnd, 1 - p);
                 continue;
             }
 
-            // The new look is painted top to bottom: the old picture becomes transparent above a soft moving edge.
-            var clear = new GradientStop(Colors.Transparent, -Band);
-            var solid = new GradientStop(Colors.Black, 0);
-            s.Old.OpacityMask = new LinearGradientBrush(new GradientStopCollection { clear, solid }, new Point(0, 0), new Point(0, 1));
-            clear.BeginAnimation(GradientStop.OffsetProperty, new DoubleAnimation(-Band, 1, time) { EasingFunction = ease });
-            solid.BeginAnimation(GradientStop.OffsetProperty, new DoubleAnimation(0, 1 + Band, time) { EasingFunction = ease });
+            // The edge travels from above the screen to below it: live screen above, soft band, frozen picture below.
+            var band = BandHeight(s);
+            var edge = (int)Math.Round(-band + p * (s.Height + band));
+            Native.ClipWindow(s.MainHwnd, 0, Math.Clamp(edge + band, 0, s.Height), s.Width, s.Height);
+            Native.PlaceWindow(s.BandHwnd, s.Bounds.Left, s.Bounds.Top + edge, s.Width, band);
+            // The band shows the part of the frozen picture under it; WPF lays it out in DIPs of the band window's DPI.
+            var dpi = VisualTreeHelper.GetDpi(s.Band);
+            var image = (Image)s.BandPicture.Children[0];
+            image.Width = s.Width / dpi.DpiScaleX;
+            image.Height = s.Height / dpi.DpiScaleY;
+            Canvas.SetTop(image, -edge / dpi.DpiScaleY);
         }
 
-        StartCounting();
-        Start(Look, run, Refresh, repeat: true);
-        Start(time + TimeSpan.FromMilliseconds(60), run, CatchUpLate, repeat: false);
-    }
-
-    /// <summary>
-    /// While the roll runs, an app that repaints late (Electron, browsers often take 2–3 s) is taken into the new
-    /// picture at once, so the part not painted yet shows it when the edge arrives. Only when the sample changed, so
-    /// the full capture (which makes the pointer flicker) is rare.
-    /// </summary>
-    private void Refresh()
-    {
-        try
-        {
-            var sample = SampleAll(screens.Select(s => s.Bounds));
-            if (lastSample is not null && !Differs(lastSample, sample, 0.002)) return;
-            lastSample = sample;
-            foreach (var s in screens) s.New.Source = Capture(s.Bounds);
-            Log.Write($"Switch animation: an app repainted at {(DateTime.UtcNow - appliedAt).TotalMilliseconds:0} ms; picture updated");
-        }
-        catch (Exception e) when (e is InvalidOperationException or ArgumentException or System.Runtime.InteropServices.ExternalException)
-        {
-            Log.Write($"Switch animation: {e.Message}");
-        }
-    }
-
-    /// <summary>An app that repainted after the new picture was taken would pop in when the overlay closes: fade to it instead.</summary>
-    private void CatchUpLate()
-    {
-        StopTimers(keepWatchdog: true); // the refresh timer
-        StopCounting();
-        try
-        {
-            if (lastSample is not null && Differs(lastSample, SampleAll(screens.Select(s => s.Bounds)), 0.002))
-            {
-                foreach (var s in screens)
-                {
-                    var shown = s.New.Source;
-                    s.Old.BeginAnimation(UIElement.OpacityProperty, null);
-                    s.Old.OpacityMask = null;
-                    s.Old.Opacity = 1;
-                    s.Old.Source = shown;
-                    s.New.Source = Capture(s.Bounds);
-                    s.Old.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(1, 0, CatchUp));
-                }
-
-                Log.Write("Switch animation: an app repainted late; faded to it");
-                Start(CatchUp + TimeSpan.FromMilliseconds(40), run, Close, repeat: false);
-                return;
-            }
-        }
-        catch (Exception e) when (e is InvalidOperationException or ArgumentException or System.Runtime.InteropServices.ExternalException)
-        {
-            Log.Write($"Switch animation: {e.Message}");
-        }
-
+        if (t < 1) return;
+        var span = (now - startedAt.Value).TotalMilliseconds;
+        Log.Write($"Switch animation: {(frames > 1 ? span / (frames - 1) : 0):0.0} ms/frame over {frames} frames");
         Close();
     }
 
@@ -248,8 +243,13 @@ public sealed class SwitchOverlay
     {
         run++; // timers of the closed run now do nothing
         StopTimers(keepWatchdog: false);
-        StopCounting();
-        foreach (var s in screens) s.Window.Close();
+        CompositionTarget.Rendering -= Step;
+        foreach (var s in screens)
+        {
+            s.Band.Close();
+            s.Main.Close();
+        }
+
         screens.Clear();
         oldSample = lastSample = null;
     }
@@ -275,33 +275,6 @@ public sealed class SwitchOverlay
             t.Timer.Stop();
             timers.Remove(t);
         }
-    }
-
-    // ---------------- frame timing (logged) ----------------
-
-    private void StartCounting()
-    {
-        StopCounting();
-        frames = 0;
-        counting = true;
-        CompositionTarget.Rendering += CountFrame;
-    }
-
-    private void StopCounting()
-    {
-        if (!counting) return;
-        counting = false;
-        CompositionTarget.Rendering -= CountFrame;
-        if (frames > 1) Log.Write($"Switch animation: {(lastFrame - firstFrame).TotalMilliseconds / (frames - 1):0.0} ms/frame over {frames} frames");
-    }
-
-    private void CountFrame(object? sender, EventArgs e)
-    {
-        var t = ((RenderingEventArgs)e).RenderingTime;
-        if (frames == 0) firstFrame = t;
-        else if (t == lastFrame) return;
-        lastFrame = t;
-        frames++;
     }
 
     // ---------------- pictures ----------------
