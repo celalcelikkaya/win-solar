@@ -58,6 +58,24 @@ const
   UninstallRoot = 'Software\Microsoft\Windows\CurrentVersion\Uninstall';
   RunKey = 'Software\Microsoft\Windows\CurrentVersion\Run';
 
+function IsUpdate: Boolean;
+begin
+  Result := ExpandConstant('{param:UPDATE|0}') = '1';
+end;
+
+// In-app updates run this setup silently with /UPDATE=1 after Win Solar quits. Start it again at the very end,
+// also when setup failed or stopped early, so the old copy keeps working instead of staying closed.
+procedure DeinitializeSetup;
+var
+  ErrorCode: Integer;
+  Exe: String;
+begin
+  // {app} is not set when setup stops in InitializeSetup; the install folder is fixed (DisableDirPage).
+  Exe := ExpandConstant('{localappdata}\Programs\Win Solar\WinSolar.exe');
+  if IsUpdate and FileExists(Exe) then
+    ShellExec('', Exe, '--minimized', '', SW_SHOWNORMAL, ewNoWait, ErrorCode);
+end;
+
 function DesktopRuntime8Installed: Boolean;
 var
   FindRec: TFindRec;

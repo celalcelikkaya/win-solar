@@ -171,11 +171,10 @@ public static class SettingsSheet
             Row("Hide when clicking outside", "Off keeps the window open", Switch(s.HideOnClickOutside, v => ctx.Change(x => x with { HideOnClickOutside = v }))),
             Row("24-hour clock", null, Switch(!s.Hour12, v => ctx.Change(x => x with { Hour12 = !v })))));
 
-        var version = typeof(SettingsSheet).Assembly.GetName().Version;
         var logo = Ui.Logo(40);
         logo.VerticalAlignment = VerticalAlignment.Center;
         var aboutText = Ui.Row(Orientation.Vertical, 0,
-            Ui.Text($"Win Solar {version?.ToString(3)}", 13, FontWeights.SemiBold),
+            Ui.Text($"Win Solar {UpdateService.Current.ToString(3)}", 13, FontWeights.SemiBold),
             Ui.Text("Celal Çelikkaya", 12, null, "Ink2"));
         aboutText.Margin = new Thickness(12, 0, 0, 0);
         aboutText.VerticalAlignment = VerticalAlignment.Center;
@@ -187,6 +186,34 @@ public static class SettingsSheet
         about.Children.Add(logo);
         about.Children.Add(aboutText);
         body.Children.Add(about);
+        body.Children.Add(UpdateRow(ctx));
+    }
+
+    /// <summary>"Check for updates" / "Restart to update" with the last result; follows the service while shown.</summary>
+    private static FrameworkElement UpdateRow(SheetContext ctx)
+    {
+        var updates = ctx.Host.Updates;
+        var holder = new ContentControl();
+
+        void Render()
+        {
+            var available = updates.State == UpdateState.Available;
+            var button = Ui.Button("Pill", available ? "Restart to update" : "Check for updates", () =>
+            {
+                if (updates.State == UpdateState.Available) _ = updates.InstallAsync(ctx.Quit);
+                else _ = updates.CheckAsync();
+            });
+            button.IsEnabled = !updates.Busy;
+            holder.Content = Row("Updates", updates.Message ?? "Win Solar checks GitHub once a day", button);
+        }
+
+        void OnChanged() => holder.Dispatcher.BeginInvoke(new Action(Render));
+        holder.Loaded += (_, _) => { updates.Changed -= OnChanged; updates.Changed += OnChanged; Render(); };
+        holder.Unloaded += (_, _) => updates.Changed -= OnChanged;
+        Render();
+        var group = Group(holder);
+        group.Margin = new Thickness(0, 12, 0, 0);
+        return group;
     }
 
     // ---------- building blocks ----------

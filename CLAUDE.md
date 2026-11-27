@@ -1,7 +1,7 @@
 # Win Solar
 
 Windows tray app that switches Windows between light and dark with the sun. Version 3 is a native rewrite in
-C# .NET 8 + WPF (replacing the Electron/React v2 that still lives in `src/`, `electron/`, `package.json` until Plan 5).
+C# .NET 8 + WPF (the Electron/React v2 was removed in Plan 5; it is in the git history and the `v1.0.0` release).
 Owner: Celal. **Talk to him in Turkish; everything in the repo (code, UI text, commits, docs) is English.**
 He prefers few questions: make sensible calls, write them down (see "Decisions"), and keep going.
 
@@ -14,6 +14,8 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
 - Plan 2 (done): `docs/superpowers/plans/2026-11-26-win-solar-v3-plan-2-real-light-battery-travel.md` (travel dropped)
 - Plan 3 (done): `docs/superpowers/plans/2026-11-27-win-solar-v3-plan-3-switch-and-profiles.md`
 - Plan 4 (done): `docs/superpowers/plans/2026-11-27-win-solar-v3-plan-4-wallpaper-and-welcome.md`
+- Plan 5 (done): `docs/superpowers/plans/2026-11-27-win-solar-v3-plan-5-updates-and-cleanup.md`
+- Release steps: `docs/release-checklist.md` (version lives only in `Directory.Build.props`)
 - Core logic, no Windows APIs, fully unit-tested: `src/WinSolar.Core`
   - `Sun/SunCalculator.cs` offline NOAA sun times (port of v2 `src/lib/sun.ts`) + sun elevation
   - `Scheduling/ScheduleCalculator.cs` prev/next/after switch, phase, progress, in the **place's** time zone;
@@ -40,6 +42,8 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
     (`IDesktopWallpaper` with Fill, own timer to the next frame, `saved-wallpaper.json` with the user's own pictures
     or slideshow, Restore); applied inside the theme write so it rolls in behind the switch overlay
   - `Settings/WallpaperUi.cs` (Wallpaper section, import sheet), `Settings/WelcomeSheet.cs` (first run, or `--welcome`)
+  - `Services/UpdateService.cs` GitHub Releases check (1 min after start, daily), download + SHA-256 check, runs the
+    installer silently with `/UPDATE=1` (the installer starts Win Solar again, also when it fails); `Core/Updates/ReleaseInfo.cs`
   - `Services/LightSensorService.cs` (WinRT LightSensor), `PowerService.cs` (PowerManager), `WeatherService.cs`
     (Open-Meteo, hourly, only without a sensor), `LearnedStore.cs`, `Log.cs`
   - `Flyout/FlyoutWindow.cs` the tray flyout (built in code), `Settings/SettingsSheet.cs` settings + location sheets
@@ -50,7 +54,7 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
 
 ## Commands (on Celal's laptop, repo at `D:\Projects\win-solar`)
 
-- Test: `dotnet test`  (193 tests, all passing)
+- Test: `dotnet test`  (223 tests, all passing)
 - Run: `dotnet run --project src\WinSolar.App` (quit the installed copy first; single instance)
 - Installer: `pwsh build\release.ps1` → `dist\WinSolarSetup-3.0.0.exe` (+ `SHA256SUMS.txt`)
 - C: has little free space: `NUGET_PACKAGES` points to `D:\.nuget\packages`; keep build output on D:.
@@ -58,7 +62,7 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
 
 ## Rules that matter
 
-- No PowerShell, scripts or child processes inside the app; Windows changes go through Win32/WinRT directly.
+- No PowerShell, scripts or child processes inside the app (one exception: the verified update installer); Windows changes go through Win32/WinRT directly.
 - Per-user only: `asInvoker` manifest, HKCU Run key, no admin prompts ever.
 - UI copy is English, short and plain; match the demo's wording.
 - Write a failing test first for every Core behaviour change (`superpowers:test-driven-development`).
@@ -106,10 +110,15 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
   Checked on the laptop: Riverside (h24, 4 frames) imports in ~5 s; Celal's own wallpaper is a World Nat slideshow.
   Test file (not in the repo): `D:\WinSolarTest\Riverside by ArseniXC.heic` from dynamicwallpaper.club.
 
-## Next (one plan each, written with `superpowers:writing-plans`, executed with `superpowers:executing-plans`)
+- Plan 5 (branch `feat/plan-5-updates`): in-app updates, release checklist, Electron v2 removed. Checked on the
+  laptop: the update check runs and the `/UPDATE=1` install restarts the app. Not yet seen end to end: a real
+  download + install, because no v3 release is published yet (the latest GitHub release is v1.0.0, Electron).
 
-- Plan 5: in-app updates from GitHub Releases, Defender false-positive submission + checksums in the release
-  checklist, remove the Electron code, final review.
+## Next
+
+- Publish v3.0.0 on GitHub Releases (Celal's call: it is public), following `docs/release-checklist.md`; then check
+  the update path once with a 3.0.1.
+- Hide Me (Celal's next app idea) lives in its own repo, `D:\Projects\hide-me` (`IDEA.md`).
 
 ## Decisions (check before changing)
 
@@ -170,3 +179,7 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
   sets from dynamicwallpaper.club allow personal use only and are never shipped). Pictures in `assets/wallpapers/lake`,
   copied next to the exe and installed into `%AppData%\Win Solar\Wallpapers\Lake` on start (`InstallBuiltIn`);
   no ActiveSet means Lake; it has no Remove button.
+- Updates (Plan 5): no setting, always on. Only `WinSolarSetup-<tag version>.exe` + `SHA256SUMS.txt` from a
+  non-draft, non-pre-release GitHub release counts; the first URL must be https on github.com and the SHA-256 is
+  what makes the file trusted (GitHub redirects assets to `release-assets.githubusercontent.com`, so the final host
+  is not checked). The file is held open from the hash until setup starts. 404 (no release) = up to date.
