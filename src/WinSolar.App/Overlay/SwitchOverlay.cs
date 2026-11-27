@@ -28,13 +28,12 @@ public sealed class SwitchOverlay
     private const double BlurRadius = 48;
     private const double BlurStretch = 0.05;
     private static readonly TimeSpan Watchdog = TimeSpan.FromSeconds(6);
-    private const double BandShare = 0.2;
-    private const int BlurCell = 20; // the soft copy is the picture averaged over 20 x 20 pixel cells
+    private const double BandShare = 0.12;
     private const int WmDpiChanged = 0x02E0;
 
     /// <summary>One monitor: the frozen picture's window, the soft band (a bare layered window we draw ourselves),
     /// and the frozen pixels the band is made from.</summary>
-    private sealed record Screen(Window Main, HwndSource Band, Native.LayeredStrip Strip, int[] Pixels, Soft Soft, int[] BandPixels, Native.Rect Bounds)
+    private sealed record Screen(Window Main, HwndSource Band, Native.LayeredStrip Strip, int[] Pixels, int[] BandPixels, Native.Rect Bounds)
     {
         public IntPtr MainHwnd => new WindowInteropHelper(Main).Handle;
 
@@ -133,7 +132,7 @@ public sealed class SwitchOverlay
             });
             Native.ExcludeFromCapture(band.Handle);
             var strip = new Native.LayeredStrip(band.Handle, width, bandHeight);
-            var screen = new Screen(main, band, strip, pixels, Soft.Of(pixels, width, height), new int[width * bandHeight], bounds);
+            var screen = new Screen(main, band, strip, pixels, new int[width * bandHeight], bounds);
             screens.Add(screen);
 
             main.SourceInitialized += (_, _) => Native.MakeOverlay(screen.MainHwnd, bounds);
@@ -179,9 +178,8 @@ public sealed class SwitchOverlay
     private static int BandHeight(Screen s) => s.BandPixels.Length / s.Width;
 
     /// <summary>
-    /// The band's pixels for an edge at <paramref name="edge"/>: toward the edge the frozen picture turns into its soft
-    /// (blurred) copy and fades out, so the old look melts into the live screen; at the band's bottom it is the sharp,
-    /// opaque picture the uncut part shows.
+    /// The band's pixels for an edge at <paramref name="edge"/>: the frozen picture under the band, premultiplied by an
+    /// alpha that rises smoothly from 0 at the edge to 1 where the uncut picture starts.
     /// </summary>
     private static void PaintBand(Screen s, int edge)
     {
@@ -198,88 +196,17 @@ public sealed class SwitchOverlay
             }
 
             var f = (i + 0.5) / band;
-            var a = (int)Math.Round(255 * f * f * (3 - 2 * f)); // smoothstep alpha
-            var sharp = (int)Math.Round(256 * Math.Clamp((f - 0.35) / 0.65, 0, 1)); // blurred near the edge, sharp below
+            var a = (int)Math.Round(255 * f * f * (3 - 2 * f)); // smoothstep
             var src = y * w;
-            s.Soft.Row(y);
             for (var x = 0; x < w; x++)
             {
                 var c = s.Pixels[src + x];
-                var b = s.Soft.At(x);
-                var r = (((((c >> 16) & 0xFF) * sharp) + (((b >> 16) & 0xFF) * (256 - sharp))) >> 8) * a / 255;
-                var g = (((((c >> 8) & 0xFF) * sharp) + (((b >> 8) & 0xFF) * (256 - sharp))) >> 8) * a / 255;
-                var bl = ((((c & 0xFF) * sharp) + ((b & 0xFF) * (256 - sharp))) >> 8) * a / 255;
-                s.BandPixels[row + x] = (a << 24) | (r << 16) | (g << 8) | bl;
+                var r = ((c >> 16) & 0xFF) * a / 255;
+                var g = ((c >> 8) & 0xFF) * a / 255;
+                var b = (c & 0xFF) * a / 255;
+                s.BandPixels[row + x] = (a << 24) | (r << 16) | (g << 8) | b;
             }
         }
-    }
-
-    /// <summary>A blurred copy of a picture: averaged over small cells once, read back with bilinear filtering.</summary>
-    private sealed class Soft
-    {
-        private readonly int[] cells;
-        private readonly int cols, rows;
-        private int[] line = [];
-
-        private Soft(int[] cells, int cols, int rows)
-        {
-            this.cells = cells;
-            this.cols = cols;
-            this.rows = rows;
-        }
-
-        public static Soft Of(int[] pixels, int width, int height)
-        {
-            var cols = (width + BlurCell - 1) / BlurCell;
-            var rows = (height + BlurCell - 1) / BlurCell;
-            var sum = new long[cols * rows * 4];
-            for (var y = 0; y < height; y++)
-            {
-                var cy = y / BlurCell * cols;
-                for (var x = 0; x < width; x++)
-                {
-                    var c = pixels[y * width + x];
-                    var k = (cy + x / BlurCell) * 4;
-                    sum[k] += (c >> 16) & 0xFF;
-                    sum[k + 1] += (c >> 8) & 0xFF;
-                    sum[k + 2] += c & 0xFF;
-                    sum[k + 3]++;
-                }
-            }
-
-            var cells = new int[cols * rows];
-            for (var i = 0; i < cells.Length; i++)
-            {
-                var n = Math.Max(1, sum[i * 4 + 3]);
-                cells[i] = (int)((sum[i * 4] / n) << 16 | (sum[i * 4 + 1] / n) << 8 | sum[i * 4 + 2] / n);
-            }
-
-            return new Soft(cells, cols, rows) { line = new int[width] };
-        }
-
-        /// <summary>Prepares <see cref="At"/> for screen row <paramref name="y"/>.</summary>
-        public void Row(int y)
-        {
-            var fy = Math.Clamp((y + 0.5) / BlurCell - 0.5, 0, rows - 1);
-            var y0 = (int)fy;
-            var y1 = Math.Min(rows - 1, y0 + 1);
-            var wy = (int)((fy - y0) * 256);
-            for (var x = 0; x < line.Length; x++)
-            {
-                var fx = Math.Clamp((x + 0.5) / BlurCell - 0.5, 0, cols - 1);
-                var x0 = (int)fx;
-                var x1 = Math.Min(cols - 1, x0 + 1);
-                var wx = (int)((fx - x0) * 256);
-                line[x] = Mix(Mix(cells[y0 * cols + x0], cells[y0 * cols + x1], wx), Mix(cells[y1 * cols + x0], cells[y1 * cols + x1], wx), wy);
-            }
-        }
-
-        public int At(int x) => line[x];
-
-        private static int Mix(int a, int b, int w) =>
-            ((((a >> 16) & 0xFF) * (256 - w) + ((b >> 16) & 0xFF) * w) >> 8) << 16
-            | ((((a >> 8) & 0xFF) * (256 - w) + ((b >> 8) & 0xFF) * w) >> 8) << 8
-            | (((a & 0xFF) * (256 - w) + (b & 0xFF) * w) >> 8);
     }
 
     /// <summary>
