@@ -51,8 +51,6 @@ public static class WelcomeSheet
 
         rows.Add(Row("Pointer and sounds at night", "Black pointer after dark",
             Switch(s.ProfilesFollow, v => Set(x => x with { ProfilesFollow = v }))));
-        rows.Add(Row("Roller animation", "The new theme is painted over the screen",
-            Switch(s.Animation != SwitchAnimation.Instant, v => Set(x => x with { Animation = v ? SwitchAnimation.Roller : SwitchAnimation.Instant }))));
         rows.Add(Row("Warn before switching", "A small card with Snooze and Skip",
             Switch(s.HeadsUp, v => Set(x => x with { HeadsUp = v }))));
         rows.Add(Row("Wait for full-screen apps", null,

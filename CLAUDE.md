@@ -34,7 +34,7 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
   - `Services/WindowsServices.cs` theme via registry + `WM_SETTINGCHANGE`, full-screen probe
   - `Services/DesktopProfile.cs` accent (uxtheme ordinals 120/122), pointer (Cursors + `SPI_SETCURSORS`), sounds
     (AppEvents scheme; the user's own sounds saved in `saved-sounds.json` while Off); `WindowsTheme` applies apps +
-    taskbar theme (always the same as the apps) + profile behind `Overlay/SwitchOverlay.cs` (Roller/Fade/Instant)
+    taskbar theme (always the same as the apps) + profile behind `Overlay/SwitchOverlay.cs` (Roller only; instant over full-screen apps)
   - `Wallpapers/WallpaperImporter.cs` (Magick.NET: HEIC frames one at a time → lossless PNG + 320-px thumbs +
     `set.json` in `%AppData%\Win Solar\Wallpapers\<set>`, via a temp folder), `Wallpapers/WallpaperService.cs`
     (`IDesktopWallpaper` with Fill, own timer to the next frame, `saved-wallpaper.json` with the user's own pictures
@@ -143,7 +143,7 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
 - Switch overlay: frozen picture per monitor (topmost, click-through, excluded from capture), theme applied below,
   a short wait for most of the screen to repaint (flicker-free 64x40 samples, 3 equal looks, 0.4–1.5 s), then the
   frozen picture is cut away from the top with a window region (cheap) behind a thin soft band (a small per-pixel
-  transparent window), so the live screen shows above the edge; Fade lowers the window's constant alpha. Measured
+  transparent window), so the live screen shows above the edge. Measured
   17–22 ms/frame on the laptop. Earlier tries that replaced the old picture with a second capture failed: apps
   (Electron, this chat) repaint for 2–5 s and never "settle", so the roll showed stale pictures and then popped.
   No nested switch while the overlay pumps the dispatcher (engine re-entrancy guard; overlay timers owned by a run
@@ -158,4 +158,7 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
   imported (sun mode) or a picture chosen (per profile). Anything that is not the picture Win Solar applied last and
   not under `Wallpapers\` is the user's own and is saved; a running slideshow is saved and restored as a slideshow
   (setting a picture ends it). Frame changes from the timer are not animated; theme-following pictures change behind
-  the switch overlay. Welcome: "Switch by room light" stays off on sensor PCs (the default schedule is the sun).
+  the switch overlay. First run (no settings.json): every feature on, room light as "Switch by" when the PC has a sensor
+  (`AppSettings.FirstRun`).
+- Switch animation is always Roller, no setting (Celal, 2026-11-27: "no settings dump"); Fade and the Instant choice
+  were removed. Instant stays only over full-screen apps and when Windows animations are off.

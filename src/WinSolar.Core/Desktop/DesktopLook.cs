@@ -4,8 +4,8 @@ using WinSolar.Core.Settings;
 
 namespace WinSolar.Core.Desktop;
 
-/// <summary>How a switch changes the screen: painted over top to bottom, crossfaded, or at once.</summary>
-public enum SwitchAnimation { Roller, Fade, Instant }
+/// <summary>How a switch changes the screen: painted over top to bottom, or at once (over a full-screen app).</summary>
+public enum SwitchAnimation { Roller, Instant }
 
 /// <summary>Windows' own pointer schemes: Windows Default (white) or Windows Black.</summary>
 public enum Pointer { White, Black }

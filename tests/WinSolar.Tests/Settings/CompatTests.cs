@@ -38,7 +38,6 @@ public class CompatTests
         var dir = Directory.CreateTempSubdirectory().FullName;
         File.WriteAllText(Path.Combine(dir, "settings.json"), """{ "Source": "RoomLight", "FollowRealLight": true, "Schema": 3 }""");
         var s = new JsonFileStore(dir).Load("settings.json", () => new AppSettings());
-        Assert.Equal(SwitchAnimation.Roller, s.Animation);
         Assert.Equal(new Profile("#0067c0", Pointer.White, Sounds.Normal), s.Day);
         Assert.Equal(new Profile("#6b69d6", Pointer.Black, Sounds.Normal), s.Night);
         Assert.True(s.ProfilesFollow);
@@ -51,10 +50,28 @@ public class CompatTests
         File.WriteAllText(Path.Combine(dir, "settings.json"),
             """{ "Animation": "Fade", "Day": { "Accent": "#0f7b0f", "Pointer": "White", "Sounds": "Normal" }, "Schema": 3 }""");
         var s = new JsonFileStore(dir).Load("settings.json", () => new AppSettings());
-        Assert.Equal(SwitchAnimation.Fade, s.Animation);
         Assert.Equal("#0f7b0f", s.Day.Accent);
         Assert.Null(s.Day.Wallpaper);
         Assert.Equal(WallpaperMode.Sun, s.Wallpaper);
         Assert.Null(s.ActiveSet);
+    }
+
+    [Fact]
+    public void First_run_uses_room_light_when_a_sensor_exists()
+    {
+        var s = AppSettings.FirstRun(hasSensor: true);
+        Assert.Equal(ScheduleSource.RoomLight, s.Source);
+        Assert.Equal(new AppSettings() with { Source = ScheduleSource.RoomLight }, s);
+    }
+
+    [Fact]
+    public void First_run_without_a_sensor_follows_the_sun_and_the_weather()
+    {
+        var s = AppSettings.FirstRun(hasSensor: false);
+        Assert.Equal(ScheduleSource.Sun, s.Source);
+        Assert.True(s.FollowRealLight);
+        Assert.Equal(WallpaperMode.Sun, s.Wallpaper);
+        Assert.True(s.ProfilesFollow && s.HeadsUp && s.WaitForFullScreen && s.Shortcut && s.StartWithWindows);
+        Assert.Equal(BatteryRule.DarkBelow20, s.Battery);
     }
 }

@@ -32,7 +32,7 @@ public sealed class WindowsTheme(
 
     /// <summary>Switches behind the overlay, except over a full-screen app (a game or video must not be covered).</summary>
     public void Apply(Theme theme) =>
-        overlay.Run(fullScreen.IsFullScreen() ? SwitchAnimation.Instant : settings().Animation, () => Write(theme));
+        overlay.Run(fullScreen.IsFullScreen() ? SwitchAnimation.Instant : SwitchAnimation.Roller, () => Write(theme));
 
     /// <summary>Settings changed: bring the profile in line with the current theme, without animation.</summary>
     public void Refresh() => Write(Read());

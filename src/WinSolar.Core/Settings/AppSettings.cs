@@ -30,7 +30,6 @@ public sealed record AppSettings
     public BatteryRule Battery { get; init; } = BatteryRule.DarkBelow20;
 
     // Plan 3
-    public SwitchAnimation Animation { get; init; } = SwitchAnimation.Roller;
     public Profile Day { get; init; } = new("#0067c0", Pointer.White, Sounds.Normal);
     public Profile Night { get; init; } = new("#6b69d6", Pointer.Black, Sounds.Normal);
 
@@ -47,6 +46,13 @@ public sealed record AppSettings
 
     /// <summary>How far real light may move a switch: 30, 60 or 90 minutes.</summary>
     public TimeSpan MaxShift => TimeSpan.FromMinutes(Math.Clamp(MaxShiftMin, 30, 90));
+
+    /// <summary>
+    /// First run: every feature on. With a light sensor the room decides the theme (Celal, 2026-11-27); without one
+    /// the sun and the weather do.
+    /// </summary>
+    public static AppSettings FirstRun(bool hasSensor) =>
+        new() { Source = hasSensor ? ScheduleSource.RoomLight : ScheduleSource.Sun };
 
     public ScheduleOptions ToScheduleOptions() =>
         new(Source == ScheduleSource.RoomLight ? ScheduleSource.Sun : Source, OffsetSunriseMin, OffsetSunsetMin, FixedLight, FixedDark);
