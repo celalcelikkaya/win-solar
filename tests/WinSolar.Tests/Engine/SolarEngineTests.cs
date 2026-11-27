@@ -327,4 +327,17 @@ public class SolarEngineTests
         r.Engine.SetMode(Mode.Auto);
         Assert.Equal(Theme.Light, r.Theme.Current);
     }
+
+    [Fact]
+    public void A_tick_during_a_switch_does_not_switch_twice()
+    {
+        var r = new Rig(Noon, Theme.Light);
+        r.Engine.Start();
+        r.Theme.DuringApply = () => r.Engine.Tick();
+        r.Engine.SetMode(Mode.Dark);
+        Assert.Equal(1, r.Theme.Applies);
+        Assert.Equal(Theme.Dark, r.Theme.Current);
+        Assert.Equal(Theme.Dark, r.TickAt(Noon.AddMinutes(1)).Applied);
+        Assert.Equal(1, r.Theme.Applies);
+    }
 }

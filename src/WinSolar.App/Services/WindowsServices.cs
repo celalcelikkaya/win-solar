@@ -17,7 +17,7 @@ public sealed class SystemClock : IClock
 /// Apps, taskbar and Start theme and the profile (accent, pointer, sounds), then one broadcast; the switch
 /// itself runs behind <see cref="SwitchOverlay"/>. Writes only what changed. Outside changes are read from the apps theme.
 /// </summary>
-public sealed class WindowsTheme(Func<AppSettings> settings, DesktopProfile profile, SwitchOverlay overlay) : IThemeApplier
+public sealed class WindowsTheme(Func<AppSettings> settings, DesktopProfile profile, SwitchOverlay overlay, IFullScreenProbe fullScreen) : IThemeApplier
 {
     private const string KeyPath = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
 
@@ -27,7 +27,9 @@ public sealed class WindowsTheme(Func<AppSettings> settings, DesktopProfile prof
         return key?.GetValue("AppsUseLightTheme") is int v && v == 0 ? Theme.Dark : Theme.Light;
     }
 
-    public void Apply(Theme theme) => overlay.Run(settings().Animation, () => Write(theme));
+    /// <summary>Switches behind the overlay, except over a full-screen app (a game or video must not be covered).</summary>
+    public void Apply(Theme theme) =>
+        overlay.Run(fullScreen.IsFullScreen() ? SwitchAnimation.Instant : settings().Animation, () => Write(theme));
 
     /// <summary>Settings changed: bring the profile in line with the current theme, without animation.</summary>
     public void Refresh() => Write(Read());

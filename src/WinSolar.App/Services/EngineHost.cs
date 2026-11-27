@@ -26,8 +26,9 @@ public sealed class EngineHost : IDisposable
         Light = new LightSensorService(dispatcher, Learned, () => store.Settings.Place ?? engine?.FallbackPlace ?? firstGuess);
         Weather = new WeatherService(dispatcher);
         Desktop = new DesktopProfile(store.Folder);
-        Theme = new WindowsTheme(() => store.Settings, Desktop, new Overlay.SwitchOverlay());
-        Engine = engine = new SolarEngine(new SystemClock(), Theme, notifier, new FullScreenProbe(), store, firstGuess,
+        var fullScreen = new FullScreenProbe();
+        Theme = new WindowsTheme(() => store.Settings, Desktop, new Overlay.SwitchOverlay(), fullScreen);
+        Engine = engine = new SolarEngine(new SystemClock(), Theme, notifier, fullScreen, store, firstGuess,
             Power, Light, Weather);
         Engine.Changed += OnChanged;
         Power.Changed += Tick;
@@ -68,8 +69,8 @@ public sealed class EngineHost : IDisposable
 
     public void Start()
     {
-        started = true;
         Engine.Start();
+        started = true; // ticks that arrive while the first switch is painted are dropped; the engine re-checks later
         RefreshLook(); // a profile setting may not match yet (first run, or changed while Win Solar was closed)
     }
 

@@ -34,6 +34,9 @@ public sealed class SolarEngine
     private (DateOnly Date, TransitionKind Kind)? outsideSince;
     private (Mode Mode, Hold? Hold) outsideUnder; // what the user had asked Win Solar for when Windows was changed
     private bool userAction;
+    private bool evaluating; // a switch can pump the UI thread (the overlay); a tick that arrives then waits
+    private bool evaluateAgain;
+    private EngineSnapshot? lastSnapshot;
     private string? error;
 
     public SolarEngine(IClock clock, IThemeApplier theme, INotifier notifier, IFullScreenProbe fullScreen, IStateStore store, Place fallbackPlace,
@@ -107,6 +110,7 @@ public sealed class SolarEngine
     /// <summary>Win + Shift + D: flip now as a manual change, or go back to Auto when the flip matches the schedule.</summary>
     public (Theme Theme, string Detail) Shortcut()
     {
+        if (evaluating) return (applied, "Switching…"); // pressed again while a switch is still being painted
         var now = clock.Now;
         applied = theme.Read();
         ClearExpired(now);
@@ -142,6 +146,32 @@ public sealed class SolarEngine
     }
 
     private EngineSnapshot Evaluate(bool starting)
+    {
+        if (evaluating)
+        {
+            evaluateAgain = true;
+            return lastSnapshot ?? throw new InvalidOperationException("Tick before Start");
+        }
+
+        evaluating = true;
+        try
+        {
+            var snapshot = EvaluateOnce(starting);
+            while (evaluateAgain)
+            {
+                evaluateAgain = false;
+                snapshot = EvaluateOnce(starting: false);
+            }
+
+            return snapshot;
+        }
+        finally
+        {
+            evaluating = false;
+        }
+    }
+
+    private EngineSnapshot EvaluateOnce(bool starting)
     {
         var now = clock.Now;
         ClearExpired(now);
@@ -212,6 +242,7 @@ public sealed class SolarEngine
                 source == LightSource.Sensor ? room.Pending : null),
             powerNow,
             batteryDark);
+        lastSnapshot = snapshot;
         Changed?.Invoke(snapshot);
         return snapshot;
     }

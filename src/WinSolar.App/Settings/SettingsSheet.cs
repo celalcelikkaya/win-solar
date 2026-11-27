@@ -32,8 +32,11 @@ public sealed class SheetContext
     /// <summary>Saves a change, lets the engine react, and redraws the open settings sheet.</summary>
     public void Change(Func<AppSettings, AppSettings> change, bool rebuild = true)
     {
+        var before = Host.Store.Settings;
         Host.Store.UpdateSettings(change);
-        Host.RefreshLook();
+        var after = Host.Store.Settings;
+        // Only a profile change re-applies the look, so an unrelated setting never undoes the user's own Windows choice.
+        if (before.Day != after.Day || before.Night != after.Night || before.ProfilesFollow != after.ProfilesFollow) Host.RefreshLook();
         Host.Tick();
         if (rebuild) Flyout.RebuildSheet(body => SettingsSheet.Build(body, this));
     }

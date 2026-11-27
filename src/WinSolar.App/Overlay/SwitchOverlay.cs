@@ -13,8 +13,9 @@ namespace WinSolar.App.Overlay;
 
 /// <summary>
 /// Hides Windows' instant theme cut: freezes each monitor's picture in a topmost, click-through window, lets the
-/// theme change underneath, captures the new look (the overlay is excluded from capture) and then rolls or fades the
-/// old picture away. Exactly one overlay at a time; it can never stay on screen (watchdog).
+/// theme change underneath, waits until Windows has really repainted (the overlay is excluded from capture) and then
+/// rolls or fades the old picture away. One overlay at a time; it can never stay on screen (one-shot watchdog), and
+/// timers of an overlay that was closed do nothing (each run has its own number).
 /// </summary>
 public sealed class SwitchOverlay
 {
@@ -26,19 +27,28 @@ public sealed class SwitchOverlay
     private static readonly TimeSpan FadeTime = TimeSpan.FromSeconds(1.3);
     private static readonly TimeSpan Watchdog = TimeSpan.FromSeconds(8);
     private const double Band = 0.12;
+    private const int WmDpiChanged = 0x02E0;
 
     private readonly List<(Window Window, Native.Rect Bounds, Image New, Image Old)> screens = [];
+    private readonly List<(DispatcherTimer Timer, bool Watchdog)> timers = [];
+    private int run;
+    private bool freezing;
     private uint[]? oldSample, lastSample;
     private int stableLooks;
     private DateTime appliedAt;
-    private DispatcherTimer? step;
-    private DispatcherTimer? watchdog;
+    private bool counting;
     private int frames;
     private TimeSpan firstFrame, lastFrame;
 
     /// <summary>Runs <paramref name="apply"/> (exactly once) behind the chosen animation; its exceptions reach the caller.</summary>
     public void Run(SwitchAnimation animation, Action apply)
     {
+        if (freezing)
+        {
+            apply(); // a switch that arrives while the screen is being frozen: no second overlay
+            return;
+        }
+
         Close();
         if (animation == SwitchAnimation.Instant || !SystemParameters.ClientAreaAnimation)
         {
@@ -46,16 +56,23 @@ public sealed class SwitchOverlay
             return;
         }
 
+        var me = run;
+        Start(Watchdog, me, Close, repeat: false, watchdog: true);
         try
         {
+            freezing = true;
             Freeze();
         }
-        catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception or System.Runtime.InteropServices.ExternalException)
+        catch (Exception e)
         {
             Log.Write($"Switch animation skipped: {e.Message}");
             Close();
             apply();
             return;
+        }
+        finally
+        {
+            freezing = false;
         }
 
         try
@@ -68,21 +85,20 @@ public sealed class SwitchOverlay
             throw;
         }
 
-        watchdog = new DispatcherTimer(Watchdog, DispatcherPriority.Normal, (_, _) => Close(), Dispatcher.CurrentDispatcher);
         appliedAt = DateTime.UtcNow;
         lastSample = null;
         stableLooks = 0;
-        step = new DispatcherTimer(Look, DispatcherPriority.Normal, (_, _) => WaitForRepaint(animation), Dispatcher.CurrentDispatcher);
+        Start(Look, me, () => WaitForRepaint(animation), repeat: true);
     }
 
     /// <summary>Shows the current picture of every monitor and waits until it is really on screen.</summary>
     private void Freeze()
     {
-        foreach (var bounds in Native.Monitors())
+        var monitors = Native.Monitors();
+        oldSample = SampleAll(monitors);
+        foreach (var bounds in monitors)
         {
-            var picture = Capture(bounds);
-            oldSample ??= Sample(picture);
-            var oldImage = new Image { Source = picture, Stretch = Stretch.Fill };
+            var oldImage = new Image { Source = Capture(bounds), Stretch = Stretch.Fill };
             var newImage = new Image { Stretch = Stretch.Fill };
             var window = new Window
             {
@@ -98,10 +114,20 @@ public sealed class SwitchOverlay
                 Height = 1,
                 Content = new Grid { Children = { newImage, oldImage } },
             };
-            window.SourceInitialized += (_, _) => Native.MakeOverlay(new WindowInteropHelper(window).Handle, bounds);
-            window.Show();
-            Native.MakeOverlay(new WindowInteropHelper(window).Handle, bounds); // again: WPF may resize on show
+            window.SourceInitialized += (_, _) =>
+            {
+                var hwnd = new WindowInteropHelper(window).Handle;
+                // Crossing monitors of different DPI must not resize the overlay: it is placed in physical pixels.
+                HwndSource.FromHwnd(hwnd)?.AddHook((IntPtr _, int msg, IntPtr _, IntPtr _, ref bool handled) =>
+                {
+                    if (msg == WmDpiChanged) handled = true;
+                    return IntPtr.Zero;
+                });
+                Native.MakeOverlay(hwnd, bounds);
+            };
             screens.Add((window, bounds, newImage, oldImage));
+            window.Show();
+            Native.MakeOverlay(new WindowInteropHelper(window).Handle, bounds); // again: WPF may move it on show
         }
 
         // Let WPF render the frozen pictures and DWM put them on screen before anything changes below.
@@ -112,51 +138,32 @@ public sealed class SwitchOverlay
 
     /// <summary>
     /// Windows repaints at its own pace after a theme change, and some apps (Electron, browsers) much later than the
-    /// taskbar. Look about every 100 ms (the overlay is excluded from capture) and start once the screen differs from
-    /// the frozen picture and three looks in a row agree, no sooner than 0.6 s and no later than 3 s.
+    /// taskbar. Look about every 100 ms with a tiny, flicker-free sample of every monitor, and start once the screen
+    /// differs from the frozen picture and three looks in a row agree, no sooner than 0.6 s and no later than 3 s.
     /// </summary>
     private void WaitForRepaint(SwitchAnimation animation)
     {
         try
         {
-            var captures = screens.Select(s => Capture(s.Bounds)).ToList();
-            var sample = Sample(captures[0]);
+            var sample = SampleAll(screens.Select(s => s.Bounds));
             var changed = Differs(oldSample!, sample, 0.02);
             stableLooks = changed && lastSample is not null && !Differs(lastSample, sample, 0.002) ? stableLooks + 1 : 0;
             lastSample = sample;
             var waited = DateTime.UtcNow - appliedAt;
             if ((stableLooks < 2 || waited < MinWait) && waited < GiveUp) return;
-            for (var i = 0; i < screens.Count; i++) screens[i].New.Source = captures[i];
+            foreach (var s in screens) s.New.Source = Capture(s.Bounds);
         }
-        catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.ExternalException)
+        catch (Exception e) when (e is InvalidOperationException or ArgumentException or System.Runtime.InteropServices.ExternalException)
         {
             Log.Write($"Switch animation ended early: {e.Message}");
             Close();
             return;
         }
 
-        step?.Stop();
-        step = null;
+        StopTimers(keepWatchdog: true);
         Log.Write($"Switch animation: screen repainted after {(DateTime.UtcNow - appliedAt).TotalMilliseconds:0} ms");
         Reveal(animation);
     }
-
-    /// <summary>A 64 x 40 grid of pixels, enough to tell a theme change from a blinking caret.</summary>
-    private static uint[] Sample(BitmapSource image)
-    {
-        var w = image.PixelWidth;
-        var h = image.PixelHeight;
-        var pixels = new uint[w * h];
-        image.CopyPixels(pixels, w * 4, 0);
-        var sample = new uint[64 * 40];
-        for (var y = 0; y < 40; y++)
-            for (var x = 0; x < 64; x++)
-                sample[y * 64 + x] = pixels[(y * h / 40 + h / 80) * w + x * w / 64 + w / 128] & 0xFFFFFF;
-        return sample;
-    }
-
-    private static bool Differs(uint[] a, uint[] b, double share) =>
-        a.Zip(b).Count(p => p.First != p.Second) > share * a.Length;
 
     private void Reveal(SwitchAnimation animation)
     {
@@ -178,46 +185,114 @@ public sealed class SwitchOverlay
             solid.BeginAnimation(GradientStop.OffsetProperty, new DoubleAnimation(0, 1 + Band, time) { EasingFunction = ease });
         }
 
-        frames = 0;
-        CompositionTarget.Rendering += CountFrame;
-        step = new DispatcherTimer(time + TimeSpan.FromMilliseconds(60), DispatcherPriority.Normal, (_, _) => CatchUpLate(), Dispatcher.CurrentDispatcher);
+        StartCounting();
+        Start(Look, run, Refresh, repeat: true);
+        Start(time + TimeSpan.FromMilliseconds(60), run, CatchUpLate, repeat: false);
+    }
+
+    /// <summary>
+    /// While the roll runs, an app that repaints late (Electron, browsers often take 2–3 s) is taken into the new
+    /// picture at once, so the part not painted yet shows it when the edge arrives. Only when the sample changed, so
+    /// the full capture (which makes the pointer flicker) is rare.
+    /// </summary>
+    private void Refresh()
+    {
+        try
+        {
+            var sample = SampleAll(screens.Select(s => s.Bounds));
+            if (lastSample is not null && !Differs(lastSample, sample, 0.002)) return;
+            lastSample = sample;
+            foreach (var s in screens) s.New.Source = Capture(s.Bounds);
+            Log.Write($"Switch animation: an app repainted at {(DateTime.UtcNow - appliedAt).TotalMilliseconds:0} ms; picture updated");
+        }
+        catch (Exception e) when (e is InvalidOperationException or ArgumentException or System.Runtime.InteropServices.ExternalException)
+        {
+            Log.Write($"Switch animation: {e.Message}");
+        }
     }
 
     /// <summary>An app that repainted after the new picture was taken would pop in when the overlay closes: fade to it instead.</summary>
     private void CatchUpLate()
     {
-        step?.Stop();
-        step = null;
-        CompositionTarget.Rendering -= CountFrame;
+        StopTimers(keepWatchdog: true); // the refresh timer
+        StopCounting();
         try
         {
-            var late = false;
-            foreach (var s in screens)
+            if (lastSample is not null && Differs(lastSample, SampleAll(screens.Select(s => s.Bounds)), 0.002))
             {
-                var live = Capture(s.Bounds);
-                if (s.New.Source is not BitmapSource shown || !Differs(Sample(shown), Sample(live), 0.002)) continue;
-                late = true;
-                s.Old.BeginAnimation(UIElement.OpacityProperty, null);
-                s.Old.OpacityMask = null;
-                s.Old.Opacity = 1;
-                s.Old.Source = shown;
-                s.New.Source = live;
-                s.Old.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(1, 0, CatchUp));
-            }
+                foreach (var s in screens)
+                {
+                    var shown = s.New.Source;
+                    s.Old.BeginAnimation(UIElement.OpacityProperty, null);
+                    s.Old.OpacityMask = null;
+                    s.Old.Opacity = 1;
+                    s.Old.Source = shown;
+                    s.New.Source = Capture(s.Bounds);
+                    s.Old.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(1, 0, CatchUp));
+                }
 
-            if (late)
-            {
                 Log.Write("Switch animation: an app repainted late; faded to it");
-                step = new DispatcherTimer(CatchUp + TimeSpan.FromMilliseconds(40), DispatcherPriority.Normal, (_, _) => Close(), Dispatcher.CurrentDispatcher);
+                Start(CatchUp + TimeSpan.FromMilliseconds(40), run, Close, repeat: false);
                 return;
             }
         }
-        catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.ExternalException)
+        catch (Exception e) when (e is InvalidOperationException or ArgumentException or System.Runtime.InteropServices.ExternalException)
         {
             Log.Write($"Switch animation: {e.Message}");
         }
 
         Close();
+    }
+
+    public void Close()
+    {
+        run++; // timers of the closed run now do nothing
+        StopTimers(keepWatchdog: false);
+        StopCounting();
+        foreach (var s in screens) s.Window.Close();
+        screens.Clear();
+        oldSample = lastSample = null;
+    }
+
+    // ---------------- timers that belong to one run ----------------
+
+    private void Start(TimeSpan interval, int owner, Action action, bool repeat, bool watchdog = false)
+    {
+        var timer = new DispatcherTimer(DispatcherPriority.Normal) { Interval = interval };
+        timer.Tick += (_, _) =>
+        {
+            if (!repeat || owner != run) timer.Stop();
+            if (owner == run) action();
+        };
+        timers.Add((timer, watchdog));
+        timer.Start();
+    }
+
+    private void StopTimers(bool keepWatchdog)
+    {
+        foreach (var t in timers.Where(t => !(keepWatchdog && t.Watchdog)).ToList())
+        {
+            t.Timer.Stop();
+            timers.Remove(t);
+        }
+    }
+
+    // ---------------- frame timing (logged) ----------------
+
+    private void StartCounting()
+    {
+        StopCounting();
+        frames = 0;
+        counting = true;
+        CompositionTarget.Rendering += CountFrame;
+    }
+
+    private void StopCounting()
+    {
+        if (!counting) return;
+        counting = false;
+        CompositionTarget.Rendering -= CountFrame;
+        if (frames > 1) Log.Write($"Switch animation: {(lastFrame - firstFrame).TotalMilliseconds / (frames - 1):0.0} ms/frame over {frames} frames");
     }
 
     private void CountFrame(object? sender, EventArgs e)
@@ -229,22 +304,12 @@ public sealed class SwitchOverlay
         frames++;
     }
 
-    public void Close()
-    {
-        step?.Stop();
-        watchdog?.Stop();
-        step = watchdog = null;
-        CompositionTarget.Rendering -= CountFrame;
-        if (frames > 1)
-        {
-            Log.Write($"Switch animation: {(lastFrame - firstFrame).TotalMilliseconds / (frames - 1):0.0} ms/frame over {frames} frames");
-            frames = 0;
-        }
+    // ---------------- pictures ----------------
 
-        foreach (var s in screens) s.Window.Close();
-        screens.Clear();
-        oldSample = lastSample = null;
-    }
+    private static uint[] SampleAll(IEnumerable<Native.Rect> monitors) => monitors.SelectMany(Native.SampleScreen).ToArray();
+
+    private static bool Differs(uint[] a, uint[] b, double share) =>
+        a.Length != b.Length || a.Zip(b).Count(p => p.First != p.Second) > share * a.Length;
 
     private static BitmapSource Capture(Native.Rect bounds)
     {

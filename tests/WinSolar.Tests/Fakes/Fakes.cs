@@ -24,9 +24,15 @@ internal sealed class FakeTheme(Theme current) : IThemeApplier
     /// <summary>The user (or another app) changes the Windows theme behind the engine's back.</summary>
     public void SetOutside(Theme theme) => Current = theme;
 
+    /// <summary>Runs inside the next Apply, before the theme changes (the real overlay pumps the dispatcher there).</summary>
+    public Action? DuringApply { get; set; }
+
     public void Apply(Theme theme)
     {
         if (FailApply) throw new UnauthorizedAccessException("registry");
+        var during = DuringApply;
+        DuringApply = null;
+        during?.Invoke();
         Current = theme;
         Applies++;
     }

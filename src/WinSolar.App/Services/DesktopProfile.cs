@@ -85,7 +85,8 @@ public sealed class DesktopProfile(string folder)
         if (sounds == Sounds.Off)
         {
             if (scheme == ".None") return false;
-            files.Save(SavedFile, new SavedSounds(scheme, ReadCurrent(root)));
+            // Keep the first snapshot: a later one could be taken from half-silenced sounds after a failed write.
+            if (saved is null) files.Save(SavedFile, new SavedSounds(scheme, ReadCurrent(root)));
             WriteCurrent(root, _ => "");
             root.SetValue("", ".None");
             return true;
