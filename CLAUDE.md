@@ -139,3 +139,5 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
 - Night profile sounds default Normal (the demo's "Quiet" does not exist; Off is opt-in). The profile is re-applied at
   start and when a profile setting changes (only what differs is written), never on unrelated settings.
 - No separate taskbar theme (Celal, 2026-11-27): apps, taskbar and Start always follow the switch together.
+- Profiles apply by default, including the user's own accent and pointer on first start (Celal, 2026-11-27: every
+  feature on; no "Keep mine" choice).
