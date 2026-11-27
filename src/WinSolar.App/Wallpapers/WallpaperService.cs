@@ -16,7 +16,7 @@ namespace WinSolar.App.Wallpapers;
 /// </summary>
 public sealed record SavedWallpaper(
     Dictionary<string, string> Own, int? Position, string? Applied,
-    List<string>? Slideshow = null, bool Shuffle = false, uint SlideshowMs = 0);
+    List<string>? Slideshow = null, bool Shuffle = false, uint SlideshowMs = 0, bool Spotlight = false);
 
 /// <summary>
 /// Shows the wallpaper <see cref="WallpaperChoice"/> picks (a frame of the active set, or a profile picture) on every
@@ -60,10 +60,6 @@ public sealed class WallpaperService : IDisposable
     /// <summary>The user's own wallpaper, once Win Solar has saved it.</summary>
     public SavedWallpaper? Saved { get; private set; }
 
-    /// <summary>The picture Win Solar shows now, if any.</summary>
-    public string? Showing => WallpaperChoice.For(settings(), Active(), DateTimeOffset.Now, place(), theme)?.Path;
-
-    public event Action? Changed;
 
     /// <summary>Imported sets, newest first.</summary>
     public List<(WallpaperSet Set, string Folder)> Sets()
@@ -143,25 +139,29 @@ public sealed class WallpaperService : IDisposable
             var monitors = DesktopWallpaper.Monitors(w);
             var current = monitors.ToDictionary(m => m, m => Try(() => w.GetWallpaper(m)));
             // First change, or the user picked another wallpaper in Windows: that is theirs to restore later.
-            var own = current.Where(c => WallpaperChoice.IsUsersOwn(c.Value, Saved?.Applied, Folder))
+            var own = current.Where(c => WallpaperChoice.IsUsersOwn(c.Value, Saved?.Applied, Folder, settings()))
                 .ToDictionary(c => c.Key, c => c.Value!);
             if (Saved is null || own.Count > 0)
             {
                 // Setting a picture ends a slideshow, so a running one is saved too (Win Solar never starts one).
+                // Monitors that did not change keep what was saved for them.
                 var show = DesktopWallpaper.Slideshow(w);
-                Saved = new SavedWallpaper(own, (int)w.GetPosition(), Saved?.Applied, show?.Paths, show?.Shuffle ?? false, show?.TickMs ?? 0);
+                var merged = new Dictionary<string, string>(Saved?.Own ?? []);
+                foreach (var (m, o) in own) merged[m] = o;
+                Saved = new SavedWallpaper(merged, (int)w.GetPosition(), Saved?.Applied, show?.Paths, show?.Shuffle ?? false,
+                    show?.TickMs ?? 0, own.Values.Any(WallpaperChoice.IsSpotlight));
             }
 
+            // Noted before Windows is touched: if setting fails half way (or the app ends), the picture is still
+            // known as Win Solar's and is never saved as the user's own.
+            Saved = Saved! with { Applied = path };
+            files.Save(SavedFile, Saved);
+            shown = path;
             if (current.Values.Any(c => !string.Equals(c, path, StringComparison.OrdinalIgnoreCase)) || monitors.Count == 0)
             {
                 w.SetPosition(WallpaperPosition.Fill);
                 foreach (var m in monitors) w.SetWallpaper(m, path);
             }
-
-            shown = path;
-            Saved = Saved! with { Applied = path };
-            files.Save(SavedFile, Saved);
-            Changed?.Invoke();
         }
         catch (Exception e) when (e is COMException or IOException or UnauthorizedAccessException or InvalidCastException)
         {
@@ -169,30 +169,42 @@ public sealed class WallpaperService : IDisposable
         }
     }
 
+    /// <summary>What the last Restore could not do, as UI text; null when it worked.</summary>
+    public string? RestoreNote { get; private set; }
+
     /// <summary>Puts the user's own wallpaper back (the caller sets the mode to Off).</summary>
     public void Restore()
     {
         timer.Stop();
-        if (Saved is null) return;
+        RestoreNote = null;
+        if (Saved is null || Saved.Applied is null) return; // nothing of Win Solar's is showing
         try
         {
             var w = DesktopWallpaper.Create();
             if (Saved.Position is { } p && Enum.IsDefined((WallpaperPosition)p)) w.SetPosition((WallpaperPosition)p);
             var slideshow = Saved.Slideshow is { Count: > 0 } paths
                 && DesktopWallpaper.StartSlideshow(w, paths, Saved.Shuffle, Saved.SlideshowMs);
-            if (!slideshow)
+            var restored = slideshow;
+            if (!slideshow && !Saved.Spotlight)
             {
                 foreach (var m in DesktopWallpaper.Monitors(w))
                 {
                     var own = Saved.Own.TryGetValue(m, out var o) ? o : Saved.Own.Values.FirstOrDefault();
-                    if (own is not null && (own.Length == 0 || File.Exists(own))) w.SetWallpaper(m, own);
+                    if (own is null || (own.Length > 0 && !File.Exists(own))) continue;
+                    w.SetWallpaper(m, own);
+                    restored = true;
                 }
             }
+
+            if (Saved.Spotlight)
+                RestoreNote = "Windows Spotlight can't be turned on from here. Choose it in Windows Settings > Personalization > Background.";
+            else if (!restored)
+                RestoreNote = "Your own picture is no longer there. Choose one in Windows Settings > Personalization > Background.";
+            if (RestoreNote is not null) Log.Write($"Restore: {RestoreNote}");
 
             shown = null;
             Saved = Saved with { Applied = null };
             files.Save(SavedFile, Saved);
-            Changed?.Invoke();
         }
         catch (Exception e) when (e is COMException or IOException or UnauthorizedAccessException or InvalidCastException)
         {
@@ -207,7 +219,6 @@ public sealed class WallpaperService : IDisposable
         {
             Directory.Delete(folder, recursive: true);
             cache = null;
-            Changed?.Invoke();
         }
     }
 

@@ -136,4 +136,13 @@ public class DynamicScheduleTests
     [Fact]
     public void FromXmp_rejects_a_damaged_value() =>
         Assert.Throws<FormatException>(() => DynamicSchedule.FromXmp(Xmp("h24", "YnBsaXN0MDDSAQID")));
+
+    [Fact]
+    public void Solar_set_that_never_changes_today_looks_again_in_a_day()
+    {
+        // Polar night: the sun never reaches the 60° frame, so frame 0 shows all day; still re-check, never stop.
+        var s = new DynamicSchedule(DynamicKind.Solar, [new SolarFrame(-30, 0, 0), new SolarFrame(60, 180, 1)], [], null, null);
+        var now = At("2026-12-21 00:00", Tromso.TimeZoneId);
+        Assert.Equal(now.AddDays(1), FrameChooser.NextChange(s, now, Tromso, Theme.Dark));
+    }
 }

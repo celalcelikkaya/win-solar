@@ -59,4 +59,24 @@ public class WallpaperChoiceTests
     [InlineData(null, null, false)]
     public void Users_own_wallpaper_is_anything_Win_Solar_did_not_set(string? current, string? applied, bool own) =>
         Assert.Equal(own, WallpaperChoice.IsUsersOwn(current, applied, @"C:\W"));
+
+    [Fact]
+    public void Profile_pictures_are_never_taken_for_the_users_own()
+    {
+        var s = new AppSettings
+        {
+            Day = new Profile("#0067c0", Pointer.White, Sounds.Normal, @"C:\Pics\day.jpg"),
+            Night = new Profile("#6b69d6", Pointer.Black, Sounds.Normal, @"C:\Pics\night.jpg"),
+        };
+        // Win Solar set day.jpg on one monitor, then failed before it noted that: still not the user's.
+        Assert.False(WallpaperChoice.IsUsersOwn(@"c:\pics\DAY.jpg", @"C:\Pics\night.jpg", @"C:\W", s));
+        Assert.True(WallpaperChoice.IsUsersOwn(@"C:\Pics\cat.jpg", @"C:\Pics\night.jpg", @"C:\W", s));
+    }
+
+    [Theory]
+    [InlineData(@"C:\Users\me\AppData\Local\Packages\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\LocalCache\Microsoft\IrisService\1\a.jpg", true)]
+    [InlineData(@"C:\Users\me\AppData\Local\Packages\Microsoft.Windows.ContentDeliveryManager_cw5n1h2txyewy\LocalState\Assets\x", true)]
+    [InlineData(@"C:\Users\me\Pictures\cat.jpg", false)]
+    public void Spotlight_pictures_are_recognised(string path, bool spotlight) =>
+        Assert.Equal(spotlight, WallpaperChoice.IsSpotlight(path));
 }

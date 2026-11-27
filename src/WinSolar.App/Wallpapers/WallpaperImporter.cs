@@ -67,11 +67,10 @@ public sealed class WallpaperImporter(string wallpapersFolder)
         if (free < preview.NeededBytes)
             throw new WallpaperImportException($"Not enough free space: needs {Format.Size(preview.NeededBytes)}, {Format.Size(free)} free.");
 
-        Directory.CreateDirectory(Folder);
         var temp = System.IO.Path.Combine(Folder, ".import-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(temp);
         try
         {
+            Directory.CreateDirectory(temp);
             var frames = new List<string>();
             for (var i = 0; i < preview.Frames; i++)
             {

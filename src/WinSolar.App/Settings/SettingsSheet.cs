@@ -58,6 +58,9 @@ public sealed class SheetContext
         if (before.Wallpaper != after.Wallpaper || before.ActiveSet != after.ActiveSet
             || before.Day.Wallpaper != after.Day.Wallpaper || before.Night.Wallpaper != after.Night.Wallpaper)
             Host.Wallpaper.Refresh();
+        // Off means Win Solar leaves the wallpaper alone, so its own picture makes way for the user's.
+        if (after.Wallpaper == Core.Wallpaper.WallpaperMode.Off && before.Wallpaper != Core.Wallpaper.WallpaperMode.Off)
+            Host.Wallpaper.Restore();
         Host.Tick();
         if (rebuild) Flyout.RebuildSheet(body => SettingsSheet.Build(body, this));
     }

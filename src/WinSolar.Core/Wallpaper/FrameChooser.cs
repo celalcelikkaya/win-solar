@@ -21,7 +21,10 @@ public static class FrameChooser
         _ => (theme == Theme.Dark ? schedule.Dark : schedule.Light) ?? 0,
     };
 
-    /// <summary>The next moment the frame changes; null for theme-only sets (they change with the theme).</summary>
+    /// <summary>
+    /// The next moment the frame changes (a solar set with no change in a day: a day from now); null for theme-only
+    /// sets (they change with the theme).
+    /// </summary>
     public static DateTimeOffset? NextChange(DynamicSchedule schedule, DateTimeOffset now, Place place, Theme theme)
     {
         switch (schedule.Kind)
@@ -46,7 +49,7 @@ public static class FrameChooser
                 var current = Frame(schedule, now, place, theme);
                 for (var at = now + SolarStep; at <= now.AddDays(1); at += SolarStep)
                     if (Frame(schedule, at, place, theme) != current) return at;
-                return null;
+                return now.AddDays(1); // no change today (polar night or day): look again tomorrow, never stop
             }
             default:
                 return null;

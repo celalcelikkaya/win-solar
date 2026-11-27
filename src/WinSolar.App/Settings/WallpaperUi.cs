@@ -50,15 +50,12 @@ public static class WallpaperUi
         }
 
         var saved = service.Saved;
-        var restore = Ui.Button("Pill", "Restore", () =>
-        {
-            ctx.Change(x => x with { Wallpaper = WallpaperMode.Off }, rebuild: false);
-            service.Restore();
-            ctx.Flyout.RebuildSheet(b => Build(b, ctx));
-        });
-        restore.IsEnabled = saved is not null;
+        // Choosing Off restores too (SheetContext.Change), so the button only needs to set Off.
+        var restore = Ui.Button("Pill", "Restore", () => ctx.Change(x => x with { Wallpaper = WallpaperMode.Off }));
+        restore.IsEnabled = saved?.Applied is not null;
         rows.Add(Row("Your own wallpaper",
-            saved is null ? "Saved before Win Solar first changes it" : "Saved before Win Solar changed it", restore));
+            service.RestoreNote ?? (saved is null ? "Saved before Win Solar first changes it"
+                : saved.Applied is null ? "Showing now" : "Saved before Win Solar changed it"), restore));
         body.Children.Add(Group(rows));
     }
 
@@ -73,7 +70,7 @@ public static class WallpaperUi
         {
             if (ctx.PickFile("Pictures|*.jpg;*.jpeg;*.png;*.bmp", p.Wallpaper) is { } file) ctx.Change(x => set(x, file));
         });
-        return Row("Wallpaper", p.Wallpaper is { } path ? Path.GetFileName(path) : "None chosen. Your wallpaper stays", choose);
+        return Row("Wallpaper", p.Wallpaper is { } path ? Path.GetFileName(path) : "None chosen. The wallpaper stays as it is", choose);
     }
 
     private static FrameworkElement ActiveSetRow(SheetContext ctx, WallpaperSet set, string folder)
@@ -219,6 +216,12 @@ public static class WallpaperUi
                 Failed(e.Message);
                 return;
             }
+            catch (Exception e)
+            {
+                Log.Write($"Import failed: {e}");
+                Failed("This file could not be read.");
+                return;
+            }
 
             Show(b =>
             {
@@ -254,6 +257,12 @@ public static class WallpaperUi
             catch (WallpaperImportException e)
             {
                 Failed(e.Message);
+                return;
+            }
+            catch (Exception e)
+            {
+                Log.Write($"Import failed: {e}");
+                Failed("The wallpaper could not be imported.");
                 return;
             }
 
