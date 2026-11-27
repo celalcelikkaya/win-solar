@@ -13,6 +13,7 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
 - Plan 1 (done): `docs/superpowers/plans/2026-11-26-win-solar-v3-plan-1-foundation.md`
 - Plan 2 (done): `docs/superpowers/plans/2026-11-26-win-solar-v3-plan-2-real-light-battery-travel.md` (travel dropped)
 - Plan 3 (done): `docs/superpowers/plans/2026-11-27-win-solar-v3-plan-3-switch-and-profiles.md`
+- Plan 4 (done): `docs/superpowers/plans/2026-11-27-win-solar-v3-plan-4-wallpaper-and-welcome.md`
 - Core logic, no Windows APIs, fully unit-tested: `src/WinSolar.Core`
   - `Sun/SunCalculator.cs` offline NOAA sun times (port of v2 `src/lib/sun.ts`) + sun elevation
   - `Scheduling/ScheduleCalculator.cs` prev/next/after switch, phase, progress, in the **place's** time zone;
@@ -23,6 +24,9 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
     `state.json` owned by the engine, `learned.json` owned by the App services, `log.txt`)
   - `Light/` outdoor light model + weather factor, Open-Meteo parsing, `RoomLightTracker` (hysteresis +
     5-s stability), `Calibration` (self-learned thresholds); `Power/Battery.cs` battery rules
+  - `Wallpaper/` `BinaryPlist` (bplist00), `DynamicSchedule` (macOS XMP `apple_desktop:solar|h24|apr`),
+    `FrameChooser` (frame now + next change; solar = closest sun height on the same half of the day),
+    `WallpaperSet` (`set.json`), `WallpaperChoice` (mode → picture; what counts as the user's own wallpaper)
   - Engine ports for Plan 2: `IPower`, `IRoomLight`, `IWeather` (`Engine/Ports.cs`); snapshot has `Light`, `Power`,
     `BatteryDark`, `Error`
 - WPF app: `src/WinSolar.App`
@@ -30,7 +34,12 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
   - `Services/WindowsServices.cs` theme via registry + `WM_SETTINGCHANGE`, full-screen probe
   - `Services/DesktopProfile.cs` accent (uxtheme ordinals 120/122), pointer (Cursors + `SPI_SETCURSORS`), sounds
     (AppEvents scheme; the user's own sounds saved in `saved-sounds.json` while Off); `WindowsTheme` applies apps +
-    taskbar theme (always the same as the apps) + profile behind `Overlay/SwitchOverlay.cs` (Roller/Fade/Instant)
+    taskbar theme (always the same as the apps) + profile behind `Overlay/SwitchOverlay.cs` (Roller only; instant over full-screen apps)
+  - `Wallpapers/WallpaperImporter.cs` (Magick.NET: HEIC frames one at a time → lossless PNG + 320-px thumbs +
+    `set.json` in `%AppData%\Win Solar\Wallpapers\<set>`, via a temp folder), `Wallpapers/WallpaperService.cs`
+    (`IDesktopWallpaper` with Fill, own timer to the next frame, `saved-wallpaper.json` with the user's own pictures
+    or slideshow, Restore); applied inside the theme write so it rolls in behind the switch overlay
+  - `Settings/WallpaperUi.cs` (Wallpaper section, import sheet), `Settings/WelcomeSheet.cs` (first run, or `--welcome`)
   - `Services/LightSensorService.cs` (WinRT LightSensor), `PowerService.cs` (PowerManager), `WeatherService.cs`
     (Open-Meteo, hourly, only without a sensor), `LearnedStore.cs`, `Log.cs`
   - `Flyout/FlyoutWindow.cs` the tray flyout (built in code), `Settings/SettingsSheet.cs` settings + location sheets
@@ -41,7 +50,7 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
 
 ## Commands (on Celal's laptop, repo at `D:\Projects\win-solar`)
 
-- Test: `dotnet test`  (135 tests, all passing)
+- Test: `dotnet test`  (175 tests, all passing)
 - Run: `dotnet run --project src\WinSolar.App` (quit the installed copy first; single instance)
 - Installer: `pwsh build\release.ps1` → `dist\WinSolarSetup-3.0.0.exe` (+ `SHA256SUMS.txt`)
 - C: has little free space: `NUGET_PACKAGES` points to `D:\.nuget\packages`; keep build output on D:.
@@ -86,16 +95,19 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
    start again. The Start entry seen was a stale `WinSolar.lnk` from the v2 portable build. The installer now runs
    the v2 uninstaller with `_?=` (synchronous) and deletes that stale shortcut; the laptop was reinstalled.
    The Win Solar mark is in About and the tray menu title row; the exe's FileDescription is "Win Solar".
-3. **Dynamic wallpaper is not there yet**: expected, it is Plan 4.
+3. **Dynamic wallpaper**: done in Plan 4.
 
 - Plan 3 (branch `feat/plan-3-switch-and-profiles`): Roller/Fade/Instant switch overlay, Day/Night profiles (accent,
   pointer, sounds), final review fixes, room light stability 5 s with a flyout countdown. Room light as its own
   "Switch by" choice was merged before Plan 3. Checked live by Celal: Roller, accent and pointer.
 
+- Plan 4 (branch `feat/plan-4-wallpaper`): dynamic wallpaper import (.heic), frames by sun / time of day / theme,
+  a picture per profile, save + restore of the user's own wallpaper (including a running slideshow), welcome sheet.
+  Checked on the laptop: Riverside (h24, 4 frames) imports in ~5 s; Celal's own wallpaper is a World Nat slideshow.
+  Test file (not in the repo): `D:\WinSolarTest\Riverside by ArseniXC.heic` from dynamicwallpaper.club.
+
 ## Next (one plan each, written with `superpowers:writing-plans`, executed with `superpowers:executing-plans`)
 
-- Plan 4: dynamic wallpaper import from macOS `.heic` (original resolution, Display P3 → sRGB, lossless PNG frames,
-  solar/h24/apr metadata), save + restore the user's own wallpaper, welcome screen with every feature on.
 - Plan 5: in-app updates from GitHub Releases, Defender false-positive submission + checksums in the release
   checklist, remove the Electron code, final review.
 
@@ -131,7 +143,7 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
 - Switch overlay: frozen picture per monitor (topmost, click-through, excluded from capture), theme applied below,
   a short wait for most of the screen to repaint (flicker-free 64x40 samples, 3 equal looks, 0.4–1.5 s), then the
   frozen picture is cut away from the top with a window region (cheap) behind a thin soft band (a small per-pixel
-  transparent window), so the live screen shows above the edge; Fade lowers the window's constant alpha. Measured
+  transparent window), so the live screen shows above the edge. Measured
   17–22 ms/frame on the laptop. Earlier tries that replaced the old picture with a second capture failed: apps
   (Electron, this chat) repaint for 2–5 s and never "settle", so the roll showed stale pictures and then popped.
   No nested switch while the overlay pumps the dispatcher (engine re-entrancy guard; overlay timers owned by a run
@@ -141,3 +153,16 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
 - No separate taskbar theme (Celal, 2026-11-27): apps, taskbar and Start always follow the switch together.
 - Profiles apply by default, including the user's own accent and pointer on first start (Celal, 2026-11-27: every
   feature on; no "Keep mine" choice).
+- Wallpaper (Plan 4): Magick.NET-Q8-x64 reads HEIC (libheif inside the package; no Windows codec needed); PNG at
+  compression level 3 (lossless, 4x faster than default). Win Solar never touches the wallpaper until a set is
+  imported (sun mode) or a picture chosen (per profile). Anything that is not the picture Win Solar applied last and
+  not under `Wallpapers\` is the user's own and is saved; a running slideshow is saved and restored as a slideshow
+  (setting a picture ends it). Frame changes from the timer are not animated; theme-following pictures change behind
+  the switch overlay. First run (no settings.json): every feature on, room light as "Switch by" when the PC has a sensor
+  (`AppSettings.FirstRun`).
+- Switch animation is always Roller, no setting (Celal, 2026-11-27: "no settings dump"); Fade and the Instant choice
+  were removed. Instant stays only over full-screen apps and when Windows animations are off.
+- Light sensor behaviour (measured 2026-11-27, ACPI0008 on Celal's laptop): it reports only when the light changes,
+  in ~10 lx steps (110 → 70 → 120); `GetCurrentReading` returns the last report (timestamp can be minutes old), so a
+  steady room sends nothing. That is the driver, not a bug. The flyout now shows every report at once (it waited
+  30 s and a 10% change before). Between 60 and 150 lx the theme deliberately stays as it is (hysteresis).

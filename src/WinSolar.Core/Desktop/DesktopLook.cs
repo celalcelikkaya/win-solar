@@ -4,8 +4,8 @@ using WinSolar.Core.Settings;
 
 namespace WinSolar.Core.Desktop;
 
-/// <summary>How a switch changes the screen: painted over top to bottom, crossfaded, or at once.</summary>
-public enum SwitchAnimation { Roller, Fade, Instant }
+/// <summary>How a switch changes the screen: painted over top to bottom, or at once (over a full-screen app).</summary>
+public enum SwitchAnimation { Roller, Instant }
 
 /// <summary>Windows' own pointer schemes: Windows Default (white) or Windows Black.</summary>
 public enum Pointer { White, Black }
@@ -13,8 +13,11 @@ public enum Pointer { White, Black }
 /// <summary>The user's own sound scheme, or none.</summary>
 public enum Sounds { Normal, Off }
 
-/// <summary>What a Day or Night profile sets. <paramref name="Accent"/> is one of <see cref="Accents.Swatches"/>.</summary>
-public sealed record Profile(string Accent, Pointer Pointer, Sounds Sounds);
+/// <summary>
+/// What a Day or Night profile sets. <paramref name="Accent"/> is one of <see cref="Accents.Swatches"/>;
+/// <paramref name="Wallpaper"/> is a picture used when the wallpaper mode is per profile.
+/// </summary>
+public sealed record Profile(string Accent, Pointer Pointer, Sounds Sounds, string? Wallpaper = null);
 
 /// <summary>Everything Windows should show for one theme (apps, taskbar and Start all follow <paramref name="Theme"/>).</summary>
 public sealed record Look(Theme Theme, string Accent, Pointer Pointer, Sounds Sounds);

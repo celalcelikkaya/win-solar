@@ -38,4 +38,11 @@ public class FormatTests
         var localSunset = TimeZoneInfo.ConvertTime(s.TodayDark!.At, Zones.Find("Europe/Istanbul"));
         Assert.InRange(localSunset.Hour, 16, 17); // Istanbul late-November sunset ≈ 16:40
     }
+
+    [Theory]
+    [InlineData(500L, "1 KB")]
+    [InlineData(1_500_000L, "1.5 MB")]
+    [InlineData(48_000_000L, "48 MB")]
+    [InlineData(2_400_000_000L, "2.4 GB")]
+    public void Size_is_short(long bytes, string expected) => Assert.Equal(expected, Format.Size(bytes));
 }

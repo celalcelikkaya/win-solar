@@ -29,4 +29,18 @@ public class SunCalculatorTests
         var d = SunCalculator.ForDate(new DateOnly(2026, 11, 26), -15.7861, 35.0058);
         Assert.InRange(SunCalculator.Elevation(d.Sunset!.Value, -15.7861, 35.0058), -1.5, 0.0);
     }
+
+    [Fact]
+    public void Azimuth_is_south_at_noon_in_Istanbul()
+    {
+        var d = SunCalculator.ForDate(new DateOnly(2026, 11, 26), 41.0138, 28.9497);
+        Assert.InRange(SunCalculator.Azimuth(d.Noon, 41.0138, 28.9497), 177.0, 183.0);
+    }
+
+    [Fact]
+    public void Azimuth_is_east_south_east_at_sunrise_in_Blantyre()
+    {
+        var d = SunCalculator.ForDate(new DateOnly(2026, 11, 26), -15.7861, 35.0058);
+        Assert.InRange(SunCalculator.Azimuth(d.Sunrise!.Value, -15.7861, 35.0058), 110.0, 114.0);
+    }
 }

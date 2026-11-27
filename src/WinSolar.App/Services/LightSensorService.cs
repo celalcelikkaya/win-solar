@@ -15,7 +15,6 @@ namespace WinSolar.App.Services;
 /// </summary>
 public sealed class LightSensorService : IRoomLight, IDisposable
 {
-    private static readonly TimeSpan LuxRefresh = TimeSpan.FromSeconds(30);
 
     private readonly Dispatcher dispatcher;
     private readonly LearnedStore store;
@@ -24,7 +23,6 @@ public sealed class LightSensorService : IRoomLight, IDisposable
     private readonly RoomLightTracker tracker;
     private readonly CalibrationLearner learner;
     private double? reportedLux;
-    private DateTimeOffset reportedAt;
 
     public LightSensorService(Dispatcher dispatcher, LearnedStore store, Func<Place> place)
     {
@@ -87,12 +85,12 @@ public sealed class LightSensorService : IRoomLight, IDisposable
             tracker.Thresholds = CalibrationMath.For(learner.Current);
         }
 
-        var luxMoved = reportedLux is not { } last
-            || (Math.Abs(lux - last) > Math.Max(5, last * 0.1) && now - reportedAt >= LuxRefresh);
+        // The sensor itself reports only when the light changes (in ~10 lx steps on Celal's laptop, measured
+        // 2026-11-27), so every new value is shown at once.
+        var luxMoved = reportedLux != lux;
         if (before != (tracker.Stable(now), tracker.Pending) || luxMoved)
         {
             reportedLux = lux;
-            reportedAt = now;
             Changed?.Invoke();
         }
     }

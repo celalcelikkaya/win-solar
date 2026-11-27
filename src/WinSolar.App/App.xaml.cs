@@ -5,6 +5,7 @@ using WinSolar.App.Services;
 using WinSolar.App.SettingsUi;
 using WinSolar.App.Styling;
 using WinSolar.App.Tray;
+using WinSolar.Core.Settings;
 
 namespace WinSolar.App;
 
@@ -97,8 +98,18 @@ public partial class App : Application
         }) { IsBackground = true, Name = "WinSolar.ShowListener" };
         listener.Start();
 
+        // First run: every feature on (room light too when this PC has a sensor); saved now, so the welcome shows once.
+        if (store.IsFirstRun) store.UpdateSettings(_ => AppSettings.FirstRun(engineHost.Light.Available));
         engineHost.Start();
-        if (!e.Args.Contains("--minimized", StringComparer.OrdinalIgnoreCase)) window.ShowFlyout();
+        if (store.IsFirstRun || e.Args.Contains("--welcome", StringComparer.OrdinalIgnoreCase))
+        {
+            window.ShowFlyout();
+            window.OpenSheet("Welcome to Win Solar", body => WelcomeSheet.Build(body, window.Context));
+        }
+        else if (!e.Args.Contains("--minimized", StringComparer.OrdinalIgnoreCase))
+        {
+            window.ShowFlyout();
+        }
     }
 
     private bool UnregisterShortcut()

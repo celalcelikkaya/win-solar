@@ -29,6 +29,24 @@ public sealed class SheetContext
 
     public AppSettings Settings => Host.Store.Settings;
 
+    /// <summary>A file picker over the flyout (which stays open meanwhile); null when cancelled.</summary>
+    public string? PickFile(string filter, string? current)
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog { Filter = filter, CheckFileExists = true };
+        if (current is not null && System.IO.Path.GetDirectoryName(current) is { } dir && System.IO.Directory.Exists(dir))
+            dialog.InitialDirectory = dir;
+        Flyout.KeepOpen = true;
+        try
+        {
+            return dialog.ShowDialog(Flyout) == true ? dialog.FileName : null;
+        }
+        finally
+        {
+            Flyout.KeepOpen = false;
+            Flyout.Activate();
+        }
+    }
+
     /// <summary>Saves a change, lets the engine react, and redraws the open settings sheet.</summary>
     public void Change(Func<AppSettings, AppSettings> change, bool rebuild = true)
     {
@@ -37,6 +55,12 @@ public sealed class SheetContext
         var after = Host.Store.Settings;
         // Only a profile change re-applies the look, so an unrelated setting never undoes the user's own Windows choice.
         if (before.Day != after.Day || before.Night != after.Night || before.ProfilesFollow != after.ProfilesFollow) Host.RefreshLook();
+        if (before.Wallpaper != after.Wallpaper || before.ActiveSet != after.ActiveSet
+            || before.Day.Wallpaper != after.Day.Wallpaper || before.Night.Wallpaper != after.Night.Wallpaper)
+            Host.Wallpaper.Refresh();
+        // Off means Win Solar leaves the wallpaper alone, so its own picture makes way for the user's.
+        if (after.Wallpaper == Core.Wallpaper.WallpaperMode.Off && before.Wallpaper != Core.Wallpaper.WallpaperMode.Off)
+            Host.Wallpaper.Restore();
         Host.Tick();
         if (rebuild) Flyout.RebuildSheet(body => SettingsSheet.Build(body, this));
     }
@@ -118,6 +142,8 @@ public static class SettingsSheet
                 Segmented<BatteryRule>([("No change", BatteryRule.NoChange), ("Dark below 20%", BatteryRule.DarkBelow20), ("Always dark", BatteryRule.AlwaysDark)],
                     s.Battery, v => ctx.Change(x => x with { Battery = v })), stacked: true)));
 
+        WallpaperUi.Section(body, ctx);
+
         foreach (var (title, theme) in new[] { ("Day profile · Light theme", Core.Scheduling.Theme.Light), ("Night profile · Dark theme", Core.Scheduling.Theme.Dark) })
         {
             var p = theme == Core.Scheduling.Theme.Light ? s.Day : s.Night;
@@ -130,14 +156,12 @@ public static class SettingsSheet
                 v => ctx.Change(x => set(x, (theme == Core.Scheduling.Theme.Light ? x.Day : x.Night) with { Pointer = v })))));
             rows.Add(Row("Sounds", null, Segmented<Sounds>([("Normal", Sounds.Normal), ("Off", Sounds.Off)], p.Sounds,
                 v => ctx.Change(x => set(x, (theme == Core.Scheduling.Theme.Light ? x.Day : x.Night) with { Sounds = v })))));
+            if (s.Wallpaper == Core.Wallpaper.WallpaperMode.PerProfile) rows.Add(WallpaperUi.ProfileRow(ctx, theme));
             body.Children.Add(Group(rows));
         }
 
         body.Children.Add(Section("Windows"));
         body.Children.Add(Group(
-            Row("Switch animation", "How the screen changes over",
-                Segmented<SwitchAnimation>([("Roller", SwitchAnimation.Roller), ("Fade", SwitchAnimation.Fade), ("Instant", SwitchAnimation.Instant)],
-                    s.Animation, v => ctx.Change(x => x with { Animation = v })), stacked: true),
             Row("Pointer and sounds follow the profile", "Off keeps your daytime pointer and sounds",
                 Switch(s.ProfilesFollow, v => ctx.Change(x => x with { ProfilesFollow = v })))));
 

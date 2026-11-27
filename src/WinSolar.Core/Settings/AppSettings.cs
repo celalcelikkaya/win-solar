@@ -2,6 +2,7 @@ using WinSolar.Core.Decisions;
 using WinSolar.Core.Desktop;
 using WinSolar.Core.Power;
 using WinSolar.Core.Scheduling;
+using WinSolar.Core.Wallpaper;
 
 namespace WinSolar.Core.Settings;
 
@@ -29,17 +30,29 @@ public sealed record AppSettings
     public BatteryRule Battery { get; init; } = BatteryRule.DarkBelow20;
 
     // Plan 3
-    public SwitchAnimation Animation { get; init; } = SwitchAnimation.Roller;
     public Profile Day { get; init; } = new("#0067c0", Pointer.White, Sounds.Normal);
     public Profile Night { get; init; } = new("#6b69d6", Pointer.Black, Sounds.Normal);
 
     /// <summary>"Pointer and sounds follow the profile"; off keeps the Day profile's pointer and sounds.</summary>
     public bool ProfilesFollow { get; init; } = true;
 
+    // Plan 4
+    public WallpaperMode Wallpaper { get; init; } = WallpaperMode.Sun;
+
+    /// <summary>Folder name of the imported set shown in sun mode; null until one is imported.</summary>
+    public string? ActiveSet { get; init; }
+
     public int Schema { get; init; } = 3;
 
     /// <summary>How far real light may move a switch: 30, 60 or 90 minutes.</summary>
     public TimeSpan MaxShift => TimeSpan.FromMinutes(Math.Clamp(MaxShiftMin, 30, 90));
+
+    /// <summary>
+    /// First run: every feature on. With a light sensor the room decides the theme (Celal, 2026-11-27); without one
+    /// the sun and the weather do.
+    /// </summary>
+    public static AppSettings FirstRun(bool hasSensor) =>
+        new() { Source = hasSensor ? ScheduleSource.RoomLight : ScheduleSource.Sun };
 
     public ScheduleOptions ToScheduleOptions() =>
         new(Source == ScheduleSource.RoomLight ? ScheduleSource.Sun : Source, OffsetSunriseMin, OffsetSunsetMin, FixedLight, FixedDark);
