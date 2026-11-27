@@ -77,13 +77,53 @@ public sealed class WallpaperService : IDisposable
 
     public (WallpaperSet Set, string Folder)? Active()
     {
-        var name = settings().ActiveSet;
-        if (string.IsNullOrEmpty(name)) return null;
+        var name = WallpaperChoice.ActiveSetName(settings());
         var dir = Path.Combine(Folder, name);
         if (cache is { } c && c.Name == name) return (c.Set, dir);
         if (Load(dir) is not { } set) return null;
         cache = (name, set);
         return (set, dir);
+    }
+
+    /// <summary>
+    /// Copies the built-in Lake set from the app folder into <see cref="Folder"/> (with previews and set.json) when it
+    /// is not there yet. Missing pictures (a dev build without them) leave it out; nothing throws.
+    /// </summary>
+    public void InstallBuiltIn()
+    {
+        var source = Path.Combine(AppContext.BaseDirectory, "Wallpapers", BuiltInSet.Folder);
+        var target = Path.Combine(Folder, BuiltInSet.Folder);
+        if (File.Exists(Path.Combine(target, WallpaperSet.FileName))) return;
+        if (!BuiltInSet.Files.All(f => File.Exists(Path.Combine(source, f))))
+        {
+            Log.Write("Built-in wallpaper pictures are missing; Lake is not installed.");
+            return;
+        }
+
+        var temp = Path.Combine(Folder, ".import-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(temp);
+            int width = 0, height = 0;
+            foreach (var file in BuiltInSet.Files)
+            {
+                File.Copy(Path.Combine(source, file), Path.Combine(temp, file));
+                (width, height) = Thumbnails.Write(Path.Combine(temp, file), Path.Combine(temp, WallpaperImporter.ThumbFile(file)),
+                    WallpaperImporter.ThumbWidth);
+            }
+
+            new JsonFileStore(temp).Save(WallpaperSet.FileName,
+                new WallpaperSet(BuiltInSet.Folder, BuiltInSet.Schedule, BuiltInSet.Files, width, height));
+            if (Directory.Exists(target)) Directory.Delete(target, recursive: true);
+            Directory.Move(temp, target);
+            cache = null;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            Log.Write($"Could not install the built-in wallpaper: {e.Message}");
+            try { if (Directory.Exists(temp)) Directory.Delete(temp, recursive: true); }
+            catch (IOException) { /* best effort */ }
+        }
     }
 
     /// <summary>Re-checks for the theme the engine applied (cheap when nothing changed).</summary>

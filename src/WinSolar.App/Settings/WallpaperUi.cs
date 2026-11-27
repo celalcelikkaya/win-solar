@@ -80,11 +80,13 @@ public static class WallpaperUi
         var now = DateTimeOffset.Now;
         var frame = place is null ? -1 : FrameChooser.Frame(set.Schedule, now, place, theme);
         var next = place is null ? null : FrameChooser.NextChange(set.Schedule, now, place, theme);
+        var builtIn = set.Name == BuiltInSet.Folder;
         var hint = frame < 0 ? Kind(set.Schedule.Kind)
-            : $"Now showing {frame + 1} of {set.Frames.Count}"
+            : (builtIn && frame < BuiltInSet.Names.Count ? $"Now showing {BuiltInSet.Names[frame]}" : $"Now showing {frame + 1} of {set.Frames.Count}")
               + (next is { } n && place is not null ? $" · next at {Format.Time(n, place.TimeZoneId, ctx.Settings.Hour12)}" : "")
               + $" · {Kind(set.Schedule.Kind).ToLowerInvariant()}";
         var strip = Strip(set, folder, frame);
+        if (builtIn) return Row($"{set.Name} · comes with Win Solar", hint, strip, stacked: true);
         var remove = RemoveButton(ctx, set, folder);
         remove.HorizontalAlignment = HorizontalAlignment.Left;
         remove.Margin = new Thickness(0, 8, 0, 0);
@@ -94,8 +96,9 @@ public static class WallpaperUi
     private static FrameworkElement OtherSetRow(SheetContext ctx, WallpaperSet set, string folder)
     {
         var use = Ui.Button("Pill", "Use", () => ctx.Change(x => x with { ActiveSet = Path.GetFileName(folder) }));
-        return Row(set.Name, $"{set.Frames.Count} pictures · {Kind(set.Schedule.Kind).ToLowerInvariant()}",
-            Ui.Row(Orientation.Horizontal, 6, use, RemoveButton(ctx, set, folder)));
+        var hint = $"{set.Frames.Count} pictures · {Kind(set.Schedule.Kind).ToLowerInvariant()}";
+        if (set.Name == BuiltInSet.Folder) return Row($"{set.Name} · comes with Win Solar", hint, use);
+        return Row(set.Name, hint, Ui.Row(Orientation.Horizontal, 6, use, RemoveButton(ctx, set, folder)));
     }
 
     private static Button RemoveButton(SheetContext ctx, WallpaperSet set, string folder)
@@ -122,7 +125,6 @@ public static class WallpaperUi
                 Log.Write($"Could not remove {set.Name}: {e.Message}");
             }
 
-            if (wasActive) ctx.Host.Wallpaper.Restore();
             ctx.Flyout.RebuildSheet(b => Build(b, ctx));
         });
         return button;
@@ -142,6 +144,7 @@ public static class WallpaperUi
         for (var i = 0; i < set.Frames.Count; i++)
         {
             var image = new Image { Stretch = Stretch.UniformToFill, Source = Thumb(Path.Combine(folder, WallpaperImporter.ThumbFile(set.Frames[i]))) };
+            var label = set.Name == BuiltInSet.Folder && i < BuiltInSet.Names.Count ? BuiltInSet.Names[i] : $"{i + 1}";
             var cell = new Border
             {
                 Width = 64,
@@ -151,7 +154,7 @@ public static class WallpaperUi
                 BorderThickness = new Thickness(i == current ? 2 : 0),
                 Child = image,
                 ClipToBounds = true,
-                ToolTip = $"{i + 1}",
+                ToolTip = label,
             };
             cell.SetResourceReference(Border.BorderBrushProperty, "Accent");
             cell.SetResourceReference(Border.BackgroundProperty, "Card2");

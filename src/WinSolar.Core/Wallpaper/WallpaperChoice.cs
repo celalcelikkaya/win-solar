@@ -33,6 +33,9 @@ public static class WallpaperChoice
         }
     }
 
+    /// <summary>The folder of the set shown in sun mode: the imported one the user picked, else the built-in Lake.</summary>
+    public static string ActiveSetName(AppSettings s) => string.IsNullOrEmpty(s.ActiveSet) ? BuiltInSet.Folder : s.ActiveSet;
+
     /// <summary>
     /// True when the wallpaper Windows shows now was set by the user, not by Win Solar: not the picture Win Solar
     /// applied last and not one of its imported frames. "" (a solid colour) is the user's too; null is unknown.

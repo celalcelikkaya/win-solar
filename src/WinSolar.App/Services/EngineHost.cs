@@ -74,6 +74,7 @@ public sealed class EngineHost : IDisposable
     public void Start()
     {
         Wallpaper.Importer.CleanUp();
+        Wallpaper.InstallBuiltIn();
         Engine.Start();
         started = true; // ticks that arrive while the first switch is painted are dropped; the engine re-checks later
         RefreshLook(); // a profile setting may not match yet (first run, or changed while Win Solar was closed)
