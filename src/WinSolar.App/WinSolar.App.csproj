@@ -31,6 +31,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The built-in "Lake" dynamic wallpaper (Core BuiltInSet); copied into %AppData% on first start. -->
+    <None Include="..\..\assets\wallpapers\lake\*.jpg" Link="Wallpapers\Lake\%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="Magick.NET-Q8-x64" Version="14.17.2" />
   </ItemGroup>

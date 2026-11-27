@@ -38,11 +38,11 @@ public static class WelcomeSheet
                 Switch(s.FollowRealLight, v => Set(x => x with { FollowRealLight = v }))));
 
         var wallpaperOn = s.Wallpaper == WallpaperMode.Sun;
-        rows.Add(Row("Wallpaper moves with the sun", "Your own wallpaper is saved and can be restored",
+        rows.Add(Row("Wallpaper moves with the sun", "Lake, from night to dusk. Your own wallpaper is saved and can be restored",
             Switch(wallpaperOn, v => Set(x => x with { Wallpaper = v ? WallpaperMode.Sun : WallpaperMode.Off }))));
-        if (wallpaperOn && ctx.Host.Wallpaper.Active() is null)
+        if (wallpaperOn)
         {
-            var choose = Ui.Button("Pill", "Choose a dynamic wallpaper", () =>
+            var choose = Ui.Button("Pill", "Add a macOS dynamic wallpaper", () =>
                 WallpaperUi.Import(ctx, () => ctx.Flyout.OpenSheet("Welcome to Win Solar", b => Build(b, ctx))));
             choose.HorizontalAlignment = HorizontalAlignment.Left;
             choose.Margin = new Thickness(12, 0, 12, 10);

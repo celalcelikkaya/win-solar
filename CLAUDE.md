@@ -50,7 +50,7 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
 
 ## Commands (on Celal's laptop, repo at `D:\Projects\win-solar`)
 
-- Test: `dotnet test`  (175 tests, all passing)
+- Test: `dotnet test`  (193 tests, all passing)
 - Run: `dotnet run --project src\WinSolar.App` (quit the installed copy first; single instance)
 - Installer: `pwsh build\release.ps1` → `dist\WinSolarSetup-3.0.0.exe` (+ `SHA256SUMS.txt`)
 - C: has little free space: `NUGET_PACKAGES` points to `D:\.nuget\packages`; keep build output on D:.
@@ -155,7 +155,7 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
   feature on; no "Keep mine" choice).
 - Wallpaper (Plan 4): Magick.NET-Q8-x64 reads HEIC (libheif inside the package; no Windows codec needed); PNG at
   compression level 3 (lossless, 4x faster than default). Win Solar never touches the wallpaper until a set is
-  imported (sun mode) or a picture chosen (per profile). Anything that is not the picture Win Solar applied last and
+  imported or the built-in Lake set is active (sun mode, the default) or a picture chosen (per profile). Anything that is not the picture Win Solar applied last and
   not under `Wallpapers\` is the user's own and is saved; a running slideshow is saved and restored as a slideshow
   (setting a picture ends it). Frame changes from the timer are not animated; theme-following pictures change behind
   the switch overlay. First run (no settings.json): every feature on, room light as "Switch by" when the PC has a sensor
@@ -166,3 +166,7 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
   in ~10 lx steps (110 → 70 → 120); `GetCurrentReading` returns the last report (timestamp can be minutes old), so a
   steady room sends nothing. That is the driver, not a bug. The flyout now shows every report at once (it waited
   30 s and a 10% change before). Between 60 and 150 lx the theme deliberately stays as it is (hysteresis).
+- Built-in wallpaper "Lake" (Celal, 2026-11-27): 8 frames generated in Gemini (our own, so shippable; downloaded
+  sets from dynamicwallpaper.club allow personal use only and are never shipped). Pictures in `assets/wallpapers/lake`,
+  copied next to the exe and installed into `%AppData%\Win Solar\Wallpapers\Lake` on start (`InstallBuiltIn`);
+  no ActiveSet means Lake; it has no Remove button.

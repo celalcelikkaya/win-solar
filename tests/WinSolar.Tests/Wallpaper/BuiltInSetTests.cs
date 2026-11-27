@@ -28,8 +28,8 @@ public class BuiltInSetTests
 
     [Fact]
     public void Lake_has_one_file_per_frame() =>
-        Assert.Equal(["1-night.png", "2-dawn.png", "3-sunrise.png", "4-morning.png", "5-noon.png", "6-afternoon.png",
-            "7-golden-hour.png", "8-dusk.png"], BuiltInSet.Files);
+        Assert.Equal(["1-night.jpg", "2-dawn.jpg", "3-sunrise.jpg", "4-morning.jpg", "5-noon.jpg", "6-afternoon.jpg",
+            "7-golden-hour.jpg", "8-dusk.jpg"], BuiltInSet.Files);
 
     [Fact]
     public void No_imported_set_means_the_built_in_one() =>

@@ -159,7 +159,11 @@ Toggle "Pointer and sounds follow the profile" (default on); off keeps the dayti
   themselves); "Restore" puts it back and sets mode to Off.
 - Sun mode uses **macOS dynamic wallpapers (.heic) that the user imports** (Celal's choice). Apple's own sets are
   copyrighted and are not shipped; users bring their own (e.g. free sets from dynamicwallpaper.club).
-  - **Original images only** (Celal): no drawn or generated fallback set, and no quality loss on import.
+  - **Built-in set "Lake"** (changed 2026-11-27, Celal): one lake scene at eight moments of the day (night, dawn,
+    sunrise, morning, noon, afternoon, golden hour, dusk), generated for Win Solar with Google Gemini so it is ours
+    to ship (1264x848 JPEG, solar schedule in `Core/Wallpaper/BuiltInSet.cs`). Installed into the wallpapers folder
+    on first start and active by default; it cannot be removed. Downloaded sets (dynamicwallpaper.club) are not
+    shipped: their terms allow personal use only. Imported sets keep their original quality.
   - Import: pick a `.heic` file (drag and drop also works). Win Solar:
     1. Reads every image in the file at its **original resolution** (Apple sets are typically 5K or 6K); no
        downscaling, no cropping. Windows' "Fill" handles fitting to the 2160x1440 screen.
@@ -293,7 +297,7 @@ library choices (e.g. tray icon), test design, task order.
 ## Decided with Celal
 
 - Source of truth is the GitHub repo; the PC copy is not needed (Celal deletes local copies after pushing).
-- Sun wallpaper images: imported macOS dynamic wallpapers (.heic), original quality, no built-in drawn set.
+- Sun wallpaper images: the built-in Lake set (our own, Gemini-generated) plus imported macOS dynamic wallpapers (.heic), original quality.
 - First run: "Choose a dynamic wallpaper" step in the welcome screen.
 - Screen brightness: not now.
 - English UI only.
