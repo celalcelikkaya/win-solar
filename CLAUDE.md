@@ -162,3 +162,7 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
   (`AppSettings.FirstRun`).
 - Switch animation is always Roller, no setting (Celal, 2026-11-27: "no settings dump"); Fade and the Instant choice
   were removed. Instant stays only over full-screen apps and when Windows animations are off.
+- Light sensor behaviour (measured 2026-11-27, ACPI0008 on Celal's laptop): it reports only when the light changes,
+  in ~10 lx steps (110 → 70 → 120); `GetCurrentReading` returns the last report (timestamp can be minutes old), so a
+  steady room sends nothing. That is the driver, not a bug. The flyout now shows every report at once (it waited
+  30 s and a 10% change before). Between 60 and 150 lx the theme deliberately stays as it is (hysteresis).
