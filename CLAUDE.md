@@ -22,7 +22,7 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
   - `Settings/` `AppSettings`, `AppState`, `LearnedState`, atomic `JsonFileStore` (`%AppData%\Win Solar\settings.json`,
     `state.json` owned by the engine, `learned.json` owned by the App services, `log.txt`)
   - `Light/` outdoor light model + weather factor, Open-Meteo parsing, `RoomLightTracker` (hysteresis +
-    15-s stability), `Calibration` (self-learned thresholds); `Power/Battery.cs` battery rules
+    5-s stability), `Calibration` (self-learned thresholds); `Power/Battery.cs` battery rules
   - Engine ports for Plan 2: `IPower`, `IRoomLight`, `IWeather` (`Engine/Ports.cs`); snapshot has `Light`, `Power`,
     `BatteryDark`, `Error`
 - WPF app: `src/WinSolar.App`
@@ -89,7 +89,7 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
 3. **Dynamic wallpaper is not there yet**: expected, it is Plan 4.
 
 - Plan 3 (branch `feat/plan-3-switch-and-profiles`): Roller/Fade/Instant switch overlay, Day/Night profiles (accent,
-  pointer, sounds), final review fixes, room light stability 15 s with a flyout countdown. Room light as its own
+  pointer, sounds), final review fixes, room light stability 5 s with a flyout countdown. Room light as its own
   "Switch by" choice was merged before Plan 3. Checked live by Celal: Roller, accent and pointer.
 
 ## Next (one plan each, written with `superpowers:writing-plans`, executed with `superpowers:executing-plans`)
@@ -116,7 +116,7 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
   measures only (version info, per-user, no PowerShell, Defender submission, README SmartScreen note).
 - "Switch by" has three choices: Sunrise and sunset, Room light, Fixed times (Celal, 2026-11-27: day/night and the
   room are separate features). Room light: the sensor decides at any hour (dark room → Dark, bright room → Light,
-  15-s stability with a countdown in the flyout, hysteresis), sun times until the room is known or without a sensor; no heads-up. Sunrise and
+  5-s stability with a countdown in the flyout, hysteresis), sun times until the room is known or without a sensor; no heads-up. Sunrise and
   sunset: the weather (Open-Meteo cloud cover → factor `1 − 0.7·(cloud/100)^1.5`, storm codes 95–99 → 0.12) moves
   the switches by at most the max shift when "Follow the weather" is on; the sensor is not used. Learned thresholds sit at 35% / 65% between this room's evening
   and daytime hourly medians in log space (needs 6 hours of each, day ≥ 1.5× evening; else 60 / 150 lx).

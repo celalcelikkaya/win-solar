@@ -90,7 +90,7 @@ switch right after the user leaves full screen. Manual changes and the shortcut 
 - **With a sensor:** use `Windows.Devices.Sensors.LightSensor` with a `ReadingChanged` subscription (the sensor only
   reports while someone is listening; setting `ReportInterval` is what woke it in the PowerShell test).
   - Hysteresis: separate dark and light thresholds.
-  - Stability: a change must last 15 seconds before it counts (Celal, 2026-11-27; was 2 minutes); the flyout counts down.
+  - Stability: a change must last 5 seconds before it counts (Celal, 2026-11-27; was 2 minutes); the flyout counts down.
   - **Self-calibration:** start with 60 lx (dark) / 150 lx (light), then learn this room's typical daytime and
     evening levels over the first days and set the thresholds between them. Celal's evening room light (70–180 lx)
     sits right inside the default band, so calibration matters here. Show the learned thresholds in Settings with a
@@ -307,7 +307,7 @@ library choices (e.g. tray icon), test design, task order.
 - Night profile sounds default Normal (Off is a choice, not a default).
 - The switch waits until Windows has repainted (up to 3 s) before rolling, so the screen looks frozen a bit longer
   than 1.6 s.
-- Light-sensor defaults 60 / 150 lx with self-calibration; changes must last 15 seconds; real light may move a switch
+- Light-sensor defaults 60 / 150 lx with self-calibration; changes must last 5 seconds; real light may move a switch
   by at most 1 hour by default.
 - v2 settings are not migrated; the v3 installer removes v2 (asks first).
 - Version 3.0.0, same GitHub repo, work on branch `v3-wpf`, Electron code removed only after parity.
