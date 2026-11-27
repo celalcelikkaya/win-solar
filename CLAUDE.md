@@ -1,7 +1,7 @@
 # Win Solar
 
 Windows tray app that switches Windows between light and dark with the sun. Version 3 is a native rewrite in
-C# .NET 8 + WPF (replacing the Electron/React v2 that still lives in `src/`, `electron/`, `package.json` until Plan 5).
+C# .NET 8 + WPF (the Electron/React v2 was removed in Plan 5; it is in the git history and the `v1.0.0` release).
 Owner: Celal. **Talk to him in Turkish; everything in the repo (code, UI text, commits, docs) is English.**
 He prefers few questions: make sensible calls, write them down (see "Decisions"), and keep going.
 

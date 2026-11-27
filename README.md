@@ -1,67 +1,51 @@
 # <img src="https://github.com/celalcelikkaya/win-solar/blob/main/docs/screenshots/win-solar-icon.png" width="32" align="absmiddle" /> Win Solar
 
-**Win Solar** is a lightweight Windows application that automatically switches your system between light and dark themes based on local sunrise and sunset times.
+**Win Solar** switches Windows between light and dark with the sun. It is a small native tray app (C# .NET 8 + WPF)
+that stays out of the way.
 
----
+## Features
 
-## Win Solar 3 (native Windows app, branch `v3-wpf`)
+- **Sunrise and sunset** for your place, calculated offline. With **Follow the weather**, cloudy days move the
+  switches by up to a limit you set.
+- **Room light:** on a PC with a light sensor, a dark room means dark mode and a bright room means light mode.
+- **Fixed times** if you prefer a clock.
+- **A smooth switch:** the new theme rolls in from the top. Full-screen apps are never interrupted; the switch waits
+  for them.
+- **Heads-up** before a switch, with Snooze, Skip and Switch now. **Win + Shift + D** switches by hand.
+- **Day and Night profiles:** accent color, mouse pointer, sounds and a wallpaper for each.
+- **Dynamic wallpaper:** "Lake" comes built in and follows the sun from night to dusk. You can also import macOS
+  dynamic wallpapers (.heic). Your own wallpaper, or slideshow, is saved and can be restored.
+- **Battery:** dark below 20% when unplugged.
+- **Updates** from GitHub Releases in one click, checked against published SHA-256 checksums.
 
-Win Solar 3 is a rewrite in C# .NET 8 + WPF: much lighter than the Electron version, no PowerShell, a flyout that
-slides in from the taskbar, a quiet heads-up card before each switch, Win + Shift + D, real light (the PC's light
-sensor, or cloud cover from Open-Meteo when there is none), dark on low battery, and an installer that removes
-Win Solar 2 for you.
+## Install
 
-- Build and test: `dotnet test`, then `dotnet run --project src/WinSolar.App`
-- Installer: `pwsh build/release.ps1` → `dist/WinSolarSetup-3.0.0.exe` (needs Inno Setup 6)
-- Design: `docs/superpowers/specs/2026-11-26-win-solar-wpf-design.md`
+Download `WinSolarSetup-<version>.exe` from [Releases](https://github.com/celalcelikkaya/win-solar/releases) and run it.
+It installs for your user only and needs no administrator rights. Win Solar 2 is removed for you if you have it.
+It needs the free [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0); the setup tells you if
+it is missing.
 
 **First install:** the installer is not code-signed yet, so Windows SmartScreen may say "Windows protected your PC".
-Click **More info → Run anyway**. This appears only for the installer; the installed app runs normally. The installer
-needs no administrator rights.
+Click **More info → Run anyway**. This appears only for the installer; the installed app and its updates run normally.
+Each release lists the installer's SHA-256 in `SHA256SUMS.txt`.
 
----
+## Build from source
 
-## ✨ Features
-- **Automatic Theme Switching:** Dynamically toggles Windows light/dark mode according to real-time solar calculations.
-- **Location-Based:** Computes exact sunrise and sunset times based on your local coordinates.
-- **Seamless & Lightweight:** Runs quietly in the background with minimal resource usage.
-
----
-
-## 📥 Download & Installation
-
-You can download the latest stable release from the [Releases](https://github.com/celalcelikkaya/win-solar/releases) page.
-
-1. Go to the [Releases Page](https://github.com/celalcelikkaya/win-solar/releases).
-2. Download the `Setup.zip` file from the latest version.
-3. Extract and run the application.
-
----
-
-## 🛠️ Build from source
-
-Requirements: Windows, [Node.js](https://nodejs.org) 20 or newer.
+Requirements: Windows 10 or 11, .NET 8 SDK, [Inno Setup 6](https://jrsoftware.org/isinfo.php) for the installer.
 
 | Command | What it does |
 |---|---|
-| `start.bat` / `npm run dev` | Opens the interface in the browser (development) |
-| `start-desktop.bat` / `npm run desktop` | Builds and starts the desktop app |
-| `build-exe.bat` / `npm run dist` | Builds the Windows installer into `release/` |
-| `npm run dist:portable` | Builds a portable `.exe` |
-| `npm run lint` | Type check |
+| `dotnet test` | Runs the tests |
+| `dotnet run --project src\WinSolar.App` | Starts Win Solar (quit an installed copy first) |
+| `pwsh build\release.ps1` | Builds `dist\WinSolarSetup-<version>.exe` and `SHA256SUMS.txt` |
 
 ```
-src/        interface (React + TypeScript): App.tsx, components/, lib/ (sun times, scheduler, places, i18n)
-electron/   desktop shell: main.cjs (window, theme switching), tray.cjs, windows.cjs (Windows theme registry), preload.cjs
-public/     icons used by the interface
-build/      installer icon
-docs/       screenshots used in this README
+src/WinSolar.Core    sun math, schedule, decisions, light model, wallpaper schedules, settings (no Windows APIs, tested)
+src/WinSolar.App     WPF tray app: flyout, settings, switch overlay, Windows services, updates
+tests/               xUnit tests
+installer/           Inno Setup script
+docs/                design, plans, release checklist
 ```
 
----
-
-## 🖼️ Screenshots
-
-| Light Mode | Dark Mode |
-| :---: | :---: |
-| ![Light Desktop](https://github.com/celalcelikkaya/win-solar/blob/main/docs/screenshots/win-solar-desktop-light.png) <br> ![Light Tray](https://github.com/celalcelikkaya/win-solar/blob/main/docs/screenshots/win-solar-light.png) | ![Dark Desktop](https://github.com/celalcelikkaya/win-solar/blob/main/docs/screenshots/win-solar-desktop-dark.png) <br> ![Dark Tray](https://github.com/celalcelikkaya/win-solar/blob/main/docs/screenshots/win-solar-night.png) |
+Releases follow [docs/release-checklist.md](docs/release-checklist.md). Win Solar 2 (Electron) lives in the git
+history and the `v1.0.0` release.
