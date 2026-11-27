@@ -41,7 +41,7 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
 
 ## Commands (on Celal's laptop, repo at `D:\Projects\win-solar`)
 
-- Test: `dotnet test`  (134 tests, all passing)
+- Test: `dotnet test`  (135 tests, all passing)
 - Run: `dotnet run --project src\WinSolar.App` (quit the installed copy first; single instance)
 - Installer: `pwsh build\release.ps1` → `dist\WinSolarSetup-3.0.0.exe` (+ `SHA256SUMS.txt`)
 - C: has little free space: `NUGET_PACKAGES` points to `D:\.nuget\packages`; keep build output on D:.
@@ -89,8 +89,8 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
 3. **Dynamic wallpaper is not there yet**: expected, it is Plan 4.
 
 - Plan 3 (branch `feat/plan-3-switch-and-profiles`): Roller/Fade/Instant switch overlay, Day/Night profiles (accent,
-  pointer, sounds), Room light as its own "Switch by" choice (merged
-  before Plan 3). Checked live by Celal: Roller from the shortcut and the flyout.
+  pointer, sounds), final review fixes, room light stability 15 s with a flyout countdown. Room light as its own
+  "Switch by" choice was merged before Plan 3. Checked live by Celal: Roller, accent and pointer.
 
 ## Next (one plan each, written with `superpowers:writing-plans`, executed with `superpowers:executing-plans`)
 
@@ -129,8 +129,13 @@ He prefers few questions: make sensible calls, write them down (see "Decisions")
 - Accent color works only through uxtheme `SetUserColorPreference` (ordinal 122); writing the Accent/DWM registry
   values alone changed nothing on Celal's laptop (2026-11-27). If the call is missing, accent rows hide.
 - Switch overlay: frozen picture per monitor (topmost, click-through, excluded from capture), theme applied below,
-  then it waits until the screen has really repainted (3 equal looks, 0.6–3 s; Electron apps repaint late), rolls
-  1.6 s, and fades 0.3 s to any app that repainted even later. A fixed 450 ms wait missed slow apps (Celal saw no roll).
+  a short wait for most of the screen to repaint (flicker-free 64x40 samples, 3 equal looks, 0.4–1.5 s), then the
+  frozen picture is cut away from the top with a window region (cheap) behind a thin soft band (a small per-pixel
+  transparent window), so the live screen shows above the edge; Fade lowers the window's constant alpha. Measured
+  17–22 ms/frame on the laptop. Earlier tries that replaced the old picture with a second capture failed: apps
+  (Electron, this chat) repaint for 2–5 s and never "settle", so the roll showed stale pictures and then popped.
+  No nested switch while the overlay pumps the dispatcher (engine re-entrancy guard; overlay timers owned by a run
+  number; one-shot watchdog); no overlay over full-screen apps.
 - Night profile sounds default Normal (the demo's "Quiet" does not exist; Off is opt-in). The profile is re-applied at
-  start and on every settings change (only what differs is written).
+  start and when a profile setting changes (only what differs is written), never on unrelated settings.
 - No separate taskbar theme (Celal, 2026-11-27): apps, taskbar and Start always follow the switch together.
