@@ -16,7 +16,6 @@ public static class ReleaseInfo
     public const string ChecksumsName = "SHA256SUMS.txt";
 
     private static readonly Regex Tag = new(@"^[vV]?(\d{1,4})\.(\d{1,4})(?:\.(\d{1,4}))?$", RegexOptions.CultureInvariant);
-    private static readonly Regex Installer = new(@"^WinSolarSetup-[0-9.]+\.exe$", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
     private static readonly Regex Sha256 = new("^[0-9a-fA-F]{64}$", RegexOptions.CultureInvariant);
 
     /// <summary>
@@ -40,6 +39,8 @@ public static class ReleaseInfo
             if (Flag(root, "draft") || Flag(root, "prerelease")) return null;
             if (ParseTag(tagElement.GetString()!) is not { } version || version <= Normalize(current)) return null;
 
+            // Tied to the tag, so a release with the wrong installer is not offered (and re-offered) every day.
+            var wantedInstaller = $"WinSolarSetup-{version.ToString(3)}.exe";
             Uri? installer = null, sums = null;
             string? installerName = null;
             if (root.TryGetProperty("assets", out var assets) && assets.ValueKind == JsonValueKind.Array)
@@ -50,7 +51,7 @@ public static class ReleaseInfo
                     var name = Text(asset, "name");
                     var url = Url(asset, "browser_download_url");
                     if (name is null || url is null || !IsAllowedDownload(url)) continue;
-                    if (installer is null && Installer.IsMatch(name)) (installer, installerName) = (url, name);
+                    if (installer is null && string.Equals(name, wantedInstaller, StringComparison.OrdinalIgnoreCase)) (installer, installerName) = (url, name);
                     else if (sums is null && string.Equals(name, ChecksumsName, StringComparison.OrdinalIgnoreCase)) sums = url;
                 }
             }
@@ -87,11 +88,15 @@ public static class ReleaseInfo
         return null;
     }
 
-    /// <summary>Downloads come only from GitHub over HTTPS (release assets redirect to objects.githubusercontent.com).</summary>
+    private static readonly string[] Hosts = ["github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com"];
+
+    /// <summary>
+    /// Downloads come only from GitHub over HTTPS: release assets live on github.com and redirect to
+    /// release-assets.githubusercontent.com (objects.githubusercontent.com before 2025).
+    /// </summary>
     public static bool IsAllowedDownload(Uri url) =>
         url.IsAbsoluteUri && url.Scheme == Uri.UriSchemeHttps
-        && (url.IdnHost.Equals("github.com", StringComparison.OrdinalIgnoreCase)
-            || url.IdnHost.Equals("objects.githubusercontent.com", StringComparison.OrdinalIgnoreCase));
+        && Hosts.Any(h => url.IdnHost.Equals(h, StringComparison.OrdinalIgnoreCase));
 
     private static Version Normalize(Version v) => new(v.Major, v.Minor, Math.Max(v.Build, 0));
 

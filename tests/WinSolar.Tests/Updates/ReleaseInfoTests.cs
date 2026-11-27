@@ -60,6 +60,20 @@ public class ReleaseInfoTests
         Assert.Null(ReleaseInfo.Newer(json, Current));
     }
 
+    [Fact]
+    public void Installer_named_for_another_version_is_not_offered()
+    {
+        var json = Release("v3.1.0").Replace("WinSolarSetup-3.1.0.exe", "WinSolarSetup-3.0.0.exe");
+        Assert.Null(ReleaseInfo.Newer(json, Current));
+    }
+
+    [Fact]
+    public void Installer_name_may_use_a_two_part_tag()
+    {
+        var json = Release("v3.1").Replace("WinSolarSetup-3.1.exe", "WinSolarSetup-3.1.0.exe");
+        Assert.Equal("WinSolarSetup-3.1.0.exe", ReleaseInfo.Newer(json, Current)?.InstallerName);
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData("not json")]
@@ -103,6 +117,7 @@ public class ReleaseInfoTests
     [Theory]
     [InlineData("https://github.com/celalcelikkaya/win-solar/releases/download/v3.0.1/x.exe", true)]
     [InlineData("https://objects.githubusercontent.com/github-production-release-asset/1/2", true)]
+    [InlineData("https://release-assets.githubusercontent.com/github-production-release-asset/1/2", true)]
     [InlineData("http://github.com/x.exe", false)]
     [InlineData("https://github.com.evil.example/x.exe", false)]
     [InlineData("https://example.com/x.exe", false)]

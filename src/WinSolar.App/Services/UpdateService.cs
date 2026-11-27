@@ -17,8 +17,6 @@ public enum UpdateState { Idle, Checking, UpToDate, Available, Downloading, Fail
 public sealed class UpdateService : IDisposable
 {
     private const string LatestUrl = "https://api.github.com/repos/celalcelikkaya/win-solar/releases/latest";
-    private static readonly HttpClient Http = CreateClient();
-
     private readonly DispatcherTimer timer;
     private readonly string folder;
 
@@ -34,6 +32,12 @@ public sealed class UpdateService : IDisposable
     }
 
     public static Version Current { get; } = Normalize(typeof(UpdateService).Assembly.GetName().Version);
+
+    // After Current: static initializers run in order, and the client's User-Agent reads it.
+    private static readonly HttpClient Http = CreateClient();
+
+    /// <summary>Downloads stream past HttpClient.Timeout (headers only), so the whole update gets its own limit.</summary>
+    private static readonly TimeSpan DownloadLimit = TimeSpan.FromMinutes(10);
 
     public UpdateState State { get; private set; }
 
@@ -62,7 +66,14 @@ public sealed class UpdateService : IDisposable
             using var request = new HttpRequestMessage(HttpMethod.Get, LatestUrl);
             request.Headers.Accept.ParseAdd("application/vnd.github+json");
             using var response = await Http.SendAsync(request, cancel.Token);
-            response.EnsureSuccessStatusCode(); // 403 when rate-limited, 404 before the first release
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                Available = null; // no release published yet
+                Set(UpdateState.UpToDate, "Win Solar is up to date");
+                return;
+            }
+
+            response.EnsureSuccessStatusCode(); // 403 when rate-limited
             var json = await response.Content.ReadAsStringAsync(cancel.Token);
             Available = ReleaseInfo.Newer(json, Current);
             if (Available is { } update) Set(UpdateState.Available, $"Win Solar {update.Version.ToString(3)} is available");
@@ -71,7 +82,8 @@ public sealed class UpdateService : IDisposable
         catch (Exception e) when (e is HttpRequestException or TaskCanceledException or FormatException)
         {
             Log.Write($"Update check failed: {e.Message}");
-            Set(Available is null ? UpdateState.Failed : UpdateState.Available, "Could not check for updates");
+            if (Available is { } known) Set(UpdateState.Available, $"Win Solar {known.Version.ToString(3)} is available");
+            else Set(UpdateState.Failed, "Could not check for updates");
         }
     }
 
@@ -88,35 +100,42 @@ public sealed class UpdateService : IDisposable
                 throw new InvalidDataException("The download address is not GitHub.");
             CleanUp();
             Directory.CreateDirectory(folder);
+            using var cancel = new CancellationTokenSource(DownloadLimit);
 
-            var sums = await Http.GetStringAsync(update.ChecksumsUrl);
+            var sums = await Http.GetStringAsync(update.ChecksumsUrl, cancel.Token);
             var expected = ReleaseInfo.ChecksumFor(sums, update.InstallerName)
                 ?? throw new InvalidDataException("The release has no checksum for its installer.");
 
-            string actual;
-            using (var response = await Http.GetAsync(update.InstallerUrl, HttpCompletionOption.ResponseHeadersRead))
+            // The SHA-256 from the release is what makes the file trusted; GitHub picks the redirect host.
+            using (var response = await Http.GetAsync(update.InstallerUrl, HttpCompletionOption.ResponseHeadersRead, cancel.Token))
             {
                 response.EnsureSuccessStatusCode();
-                if (response.RequestMessage?.RequestUri is { } final && !ReleaseInfo.IsAllowedDownload(final))
-                    throw new InvalidDataException("The download was redirected away from GitHub.");
-                await using var source = await response.Content.ReadAsStreamAsync();
+                await using var source = await response.Content.ReadAsStreamAsync(cancel.Token);
                 await using (var file = new FileStream(part, FileMode.Create, FileAccess.Write, FileShare.None))
-                    await source.CopyToAsync(file);
+                    await source.CopyToAsync(file, cancel.Token);
             }
 
-            await using (var check = File.OpenRead(part))
-                actual = Convert.ToHexString(await SHA256.HashDataAsync(check)).ToLowerInvariant();
+            File.Move(part, exe, overwrite: true);
+            string actual;
+            // Held open (read sharing only) from the hash until setup has started: nothing can swap the file in between.
+            using (var held = new FileStream(exe, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                actual = Convert.ToHexString(await SHA256.HashDataAsync(held, cancel.Token)).ToLowerInvariant();
+                if (actual == expected)
+                {
+                    Log.Write($"Installing Win Solar {update.Version.ToString(3)}.");
+                    Process.Start(new ProcessStartInfo(exe, "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /UPDATE=1") { UseShellExecute = true });
+                }
+            }
+
             if (actual != expected)
             {
                 Log.Write($"Update {update.InstallerName}: checksum {actual} does not match {expected}.");
-                Delete(part);
+                Delete(exe);
                 Set(UpdateState.Failed, "The download did not match its checksum");
                 return;
             }
 
-            File.Move(part, exe, overwrite: true);
-            Log.Write($"Installing Win Solar {update.Version.ToString(3)}.");
-            Process.Start(new ProcessStartInfo(exe, "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /UPDATE=1") { UseShellExecute = true });
             quit();
         }
         catch (Exception e) when (e is HttpRequestException or TaskCanceledException or IOException or UnauthorizedAccessException
@@ -124,6 +143,7 @@ public sealed class UpdateService : IDisposable
         {
             Log.Write($"Update failed: {e.Message}");
             Delete(part);
+            Delete(exe);
             Set(UpdateState.Available, e is InvalidDataException ? e.Message : "Could not download the update");
         }
     }
