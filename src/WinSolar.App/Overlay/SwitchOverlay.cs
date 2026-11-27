@@ -24,9 +24,6 @@ public sealed class SwitchOverlay
     private static readonly TimeSpan GiveUp = TimeSpan.FromSeconds(1.5);
     private static readonly TimeSpan RollTime = TimeSpan.FromSeconds(1.6);
     private static readonly TimeSpan FadeTime = TimeSpan.FromSeconds(1.3);
-    private static readonly TimeSpan BlurTime = TimeSpan.FromSeconds(0.9);
-    private const double BlurRadius = 48;
-    private const double BlurStretch = 0.05;
     private static readonly TimeSpan Watchdog = TimeSpan.FromSeconds(6);
     private const double BandShare = 0.12;
     private const int WmDpiChanged = 0x02E0;
@@ -240,8 +237,7 @@ public sealed class SwitchOverlay
         CompositionTarget.Rendering += Step;
     }
 
-    /// <summary>One frame: move the cut edge (Roller), blur and stretch the old picture away (Blur), or lower the alpha
-    /// (Fade). Closes at the end.</summary>
+    /// <summary>One frame: move the cut edge (Roller) or lower the alpha (Fade). Closes at the end.</summary>
     private void Step(object? sender, EventArgs e)
     {
         var now = ((RenderingEventArgs)e).RenderingTime;
@@ -249,31 +245,13 @@ public sealed class SwitchOverlay
         lastFrame = now;
         startedAt ??= now;
         frames++;
-        var time = playing switch { SwitchAnimation.Fade => FadeTime, SwitchAnimation.Blur => BlurTime, _ => RollTime };
+        var time = playing == SwitchAnimation.Fade ? FadeTime : RollTime;
         var t = Math.Min(1, (now - startedAt.Value) / time);
         var p = t < 0.5 ? 4 * t * t * t : 1 - Math.Pow(-2 * t + 2, 3) / 2; // ease in-out
         foreach (var s in screens)
         {
             if (playing == SwitchAnimation.Fade)
             {
-                Native.SetAlpha(s.MainHwnd, 1 - p);
-                continue;
-            }
-
-            if (playing == SwitchAnimation.Blur)
-            {
-                // The old look melts: it blurs and stretches a little from the centre while the live screen comes through.
-                var picture = (Image)s.Main.Content;
-                if (picture.Effect is not System.Windows.Media.Effects.BlurEffect blur)
-                {
-                    picture.Effect = blur = new System.Windows.Media.Effects.BlurEffect { KernelType = System.Windows.Media.Effects.KernelType.Gaussian, RenderingBias = System.Windows.Media.Effects.RenderingBias.Performance };
-                    picture.RenderTransformOrigin = new Point(0.5, 0.5);
-                    picture.RenderTransform = new ScaleTransform();
-                }
-
-                var melt = 1 - Math.Pow(1 - t, 3); // ease out: the blur starts at once, the end is gentle
-                blur.Radius = BlurRadius * melt;
-                ((ScaleTransform)picture.RenderTransform).ScaleX = ((ScaleTransform)picture.RenderTransform).ScaleY = 1 + BlurStretch * melt;
                 Native.SetAlpha(s.MainHwnd, 1 - p);
                 continue;
             }

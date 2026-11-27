@@ -136,7 +136,7 @@ public static class SettingsSheet
         body.Children.Add(Section("Windows"));
         body.Children.Add(Group(
             Row("Switch animation", "How the screen changes over",
-                Segmented<SwitchAnimation>([("Roller", SwitchAnimation.Roller), ("Blur", SwitchAnimation.Blur), ("Fade", SwitchAnimation.Fade), ("Instant", SwitchAnimation.Instant)],
+                Segmented<SwitchAnimation>([("Roller", SwitchAnimation.Roller), ("Fade", SwitchAnimation.Fade), ("Instant", SwitchAnimation.Instant)],
                     s.Animation, v => ctx.Change(x => x with { Animation = v })), stacked: true),
             Row("Pointer and sounds follow the profile", "Off keeps your daytime pointer and sounds",
                 Switch(s.ProfilesFollow, v => ctx.Change(x => x with { ProfilesFollow = v })))));
